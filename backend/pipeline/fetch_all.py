@@ -21,12 +21,16 @@ import io
 import json
 import logging
 import math
+import os
 import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ── path setup so we can import our own ingestion modules ───────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -66,40 +70,49 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return R * 2 * math.asin(math.sqrt(a))
 
 
-# ── Overpass helper with retry ───────────────────────────────────────────────
+# ── Geoapify helper with retry ───────────────────────────────────────────────
 
-def _overpass_query(query: str, method: str = "get", retries: int = 3) -> list:
+def _geoapify_query(lat: float, lon: float, radius_km: float, categories: str) -> list:
     """
-    Send a query to the Overpass API with automatic retry on 429/504 errors.
-    Waits 5 s → 10 s → 20 s between attempts.
-    Returns the list of elements, or raises on final failure.
+    Send a query to the Geoapify Places API with automatic retry on 429/500 errors.
+    Returns the list of feature elements, or empty list on final failure.
     """
-    url    = "https://overpass-api.de/api/interpreter"
-    delays = [5, 10, 20]
+    api_key = os.environ.get("GEOAPIFY_API_KEY")
+    if not api_key:
+        log.warning("  GEOAPIFY_API_KEY not found in environment (.env). Returning empty list.")
+        return []
+
+    url = "https://api.geoapify.com/v2/places"
+    params = {
+        "categories": categories,
+        "filter": f"circle:{lon},{lat},{int(radius_km * 1000)}",
+        "limit": 500, # Max allowed per request
+        "apiKey": api_key,
+    }
+    
+    delays = [2, 5, 10]
+    retries = 3
 
     for attempt in range(1, retries + 1):
         try:
-            if method == "post":
-                r = requests.post(url, data=query, timeout=60)
-            else:
-                r = requests.get(url, params={"data": query}, timeout=60)
-
-            if r.status_code in (429, 504) and attempt < retries:
+            r = requests.get(url, params=params, timeout=30)
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < retries:
                 wait = delays[attempt - 1]
-                log.warning(f"  Overpass {r.status_code} — retrying in {wait}s (attempt {attempt}/{retries})")
+                log.warning(f"  Geoapify {r.status_code} — retrying in {wait}s (attempt {attempt}/{retries})")
                 time.sleep(wait)
                 continue
 
             r.raise_for_status()
-            return r.json().get("elements", [])
+            return r.json().get("features", [])
 
-        except requests.exceptions.Timeout:
+        except requests.exceptions.RequestException as e:
             if attempt < retries:
                 wait = delays[attempt - 1]
-                log.warning(f"  Overpass timeout — retrying in {wait}s (attempt {attempt}/{retries})")
+                log.warning(f"  Geoapify timeout/error — retrying in {wait}s (attempt {attempt}/{retries})")
                 time.sleep(wait)
             else:
-                raise
+                log.error(f"  Geoapify final failure: {e}")
+                return []
 
     return []
 
@@ -138,39 +151,32 @@ def pull_demographics(lat, lon, radius_km):
         return {"error": str(e), "tracts": []}
 
 
-# ── Source 2: Competitor Stores (Overpass) ──────────────────────────────────
+# ── Source 2: Competitor Stores (Geoapify) ──────────────────────────────────
 
 def pull_competitor_stores(lat, lon, radius_km):
-    log.info("[2/6] Competitor stores (Overpass)...")
-    radius_m = int(radius_km * 1000)
+    log.info("[2/6] Competitor stores (Geoapify)...")
     try:
-        query = f"""
-[out:json][timeout:55];
-(
-  node["shop"="supermarket"](around:{radius_m},{lat},{lon});
-  node["shop"="grocery"](around:{radius_m},{lat},{lon});
-  node["shop"="convenience"](around:{radius_m},{lat},{lon});
-);
-out body;
-"""
-        elements = _overpass_query(query, method="post")
+        categories = "commercial.supermarket"
+        features = _geoapify_query(lat, lon, radius_km, categories)
 
         stores = []
-        for n in elements:
-            tags    = n.get("tags", {})
-            slat    = n.get("lat")
-            slon    = n.get("lon")
+        for f in features:
+            props = f.get("properties", {})
+            geom = f.get("geometry", {}).get("coordinates", [None, None])
+            slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
+            
+            categories_list = props.get("categories", ["Unknown"])
+            shop_type = categories_list[-1].split(".")[-1] if categories_list else "Unknown"
+
             stores.append({
-                "osm_id"     : n.get("id"),
-                "name"       : tags.get("name", "Unknown"),
-                "shop_type"  : tags.get("shop"),
-                "brand"      : tags.get("brand"),
+                "place_id"   : props.get("place_id"),
+                "name"       : props.get("name", "Unknown"),
+                "shop_type"  : shop_type,
                 "lat"        : slat,
                 "lon"        : slon,
                 "dist_km"    : dist_km,
-                "address"    : tags.get("addr:street"),
-                "opening_hours": tags.get("opening_hours"),
+                "address"    : props.get("address_line1") or props.get("formatted"),
             })
 
         stores.sort(key=lambda x: x["dist_km"] or 999)
@@ -216,33 +222,28 @@ def pull_parcels(lat, lon, radius_km):
         return {"error": str(e), "count": 0, "parcels": []}
 
 
-# ── Source 4: Schools (Overpass) ─────────────────────────────────────────────
+# ── Source 4: Schools (Geoapify) ─────────────────────────────────────────────
 
 def pull_schools(lat, lon, radius_km):
-    log.info("[4/6] Schools (Overpass)...")
-    radius_m = int(radius_km * 1000)
+    log.info("[4/6] Schools (Geoapify)...")
     try:
-        query = f"""
-[out:json][timeout:55];
-(
-  node["amenity"="school"](around:{radius_m},{lat},{lon});
-  node["amenity"="college"](around:{radius_m},{lat},{lon});
-  node["amenity"="university"](around:{radius_m},{lat},{lon});
-);
-out body;
-"""
-        elements = _overpass_query(query, method="post")
+        categories = "education.school,education.college,education.university"
+        features = _geoapify_query(lat, lon, radius_km, categories)
 
         schools = []
-        for n in elements:
-            tags    = n.get("tags", {})
-            slat    = n.get("lat")
-            slon    = n.get("lon")
+        for f in features:
+            props = f.get("properties", {})
+            geom = f.get("geometry", {}).get("coordinates", [None, None])
+            slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
+            
+            categories_list = props.get("categories", ["Unknown"])
+            amenity_type = categories_list[-1].split(".")[-1] if categories_list else "Unknown"
+
             schools.append({
-                "osm_id"     : n.get("id"),
-                "name"       : tags.get("name", "Unknown"),
-                "amenity_type": tags.get("amenity"),
+                "place_id"   : props.get("place_id"),
+                "name"       : props.get("name", "Unknown"),
+                "amenity_type": amenity_type,
                 "lat"        : slat,
                 "lon"        : slon,
                 "dist_km"    : dist_km,
