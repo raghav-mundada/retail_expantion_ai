@@ -1,15 +1,34 @@
-# ── Data files ──────────────────────────────────────────────────────────────
-# Processed outputs (large, reproducible via pipelines)
+# ── Secrets & API Keys ───────────────────────────────────────────────────────
+# NEVER commit credentials — add any secret file pattern here
+.env
+.env.*
+*.env
+.env.local
+.env.development
+.env.production
+secrets.yaml
+secrets.json
+secrets.toml
+config/secrets.*
+census_api_key.txt
+api_keys.*
+*_api_key*
+*_secret*
+*credentials*
+*.pem
+*.key
+
+# ── Data outputs (large, reproducible by running the pipeline) ───────────────
 data/processed/
 data/raw/
 aadt_data/
 
-# Keep directory structure but not the files
+# Preserve folder structure without committing data files
 !data/.gitkeep
 !data/processed/.gitkeep
 !data/raw/.gitkeep
 
-# Spatial / GIS raw files
+# Spatial / GIS source files
 *.shp
 *.dbf
 *.shx
@@ -38,14 +57,6 @@ ENV/
 # ── Jupyter ──────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
-
-# ── Environment / Secrets ────────────────────────────────────────────────────
-.env
-.env.*
-*.env
-secrets.yaml
-secrets.json
-census_api_key.txt
 
 # ── IDE / Editor ─────────────────────────────────────────────────────────────
 .vscode/
