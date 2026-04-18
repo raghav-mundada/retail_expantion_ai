@@ -52,6 +52,8 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+import time
+
 # ── Spatial helper ──────────────────────────────────────────────────────────
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -62,6 +64,44 @@ def haversine_km(lat1, lon1, lat2, lon2):
          + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
          * math.sin(dlon / 2) ** 2)
     return R * 2 * math.asin(math.sqrt(a))
+
+
+# ── Overpass helper with retry ───────────────────────────────────────────────
+
+def _overpass_query(query: str, method: str = "get", retries: int = 3) -> list:
+    """
+    Send a query to the Overpass API with automatic retry on 429/504 errors.
+    Waits 5 s → 10 s → 20 s between attempts.
+    Returns the list of elements, or raises on final failure.
+    """
+    url    = "https://overpass-api.de/api/interpreter"
+    delays = [5, 10, 20]
+
+    for attempt in range(1, retries + 1):
+        try:
+            if method == "post":
+                r = requests.post(url, data=query, timeout=60)
+            else:
+                r = requests.get(url, params={"data": query}, timeout=60)
+
+            if r.status_code in (429, 504) and attempt < retries:
+                wait = delays[attempt - 1]
+                log.warning(f"  Overpass {r.status_code} — retrying in {wait}s (attempt {attempt}/{retries})")
+                time.sleep(wait)
+                continue
+
+            r.raise_for_status()
+            return r.json().get("elements", [])
+
+        except requests.exceptions.Timeout:
+            if attempt < retries:
+                wait = delays[attempt - 1]
+                log.warning(f"  Overpass timeout — retrying in {wait}s (attempt {attempt}/{retries})")
+                time.sleep(wait)
+            else:
+                raise
+
+    return []
 
 
 # ── Source 1: ACS Demographics ──────────────────────────────────────────────
@@ -105,7 +145,7 @@ def pull_competitor_stores(lat, lon, radius_km):
     radius_m = int(radius_km * 1000)
     try:
         query = f"""
-[out:json][timeout:30];
+[out:json][timeout:55];
 (
   node["shop"="supermarket"](around:{radius_m},{lat},{lon});
   node["shop"="grocery"](around:{radius_m},{lat},{lon});
@@ -113,13 +153,7 @@ def pull_competitor_stores(lat, lon, radius_km):
 );
 out body;
 """
-        r = requests.get(
-            "https://overpass-api.de/api/interpreter",
-            params={"data": query},
-            timeout=40,
-        )
-        r.raise_for_status()
-        elements = r.json().get("elements", [])
+        elements = _overpass_query(query, method="post")
 
         stores = []
         for n in elements:
@@ -189,7 +223,7 @@ def pull_schools(lat, lon, radius_km):
     radius_m = int(radius_km * 1000)
     try:
         query = f"""
-[out:json][timeout:30];
+[out:json][timeout:55];
 (
   node["amenity"="school"](around:{radius_m},{lat},{lon});
   node["amenity"="college"](around:{radius_m},{lat},{lon});
@@ -197,13 +231,7 @@ def pull_schools(lat, lon, radius_km):
 );
 out body;
 """
-        r = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data=query,
-            timeout=40,
-        )
-        r.raise_for_status()
-        elements = r.json().get("elements", [])
+        elements = _overpass_query(query, method="post")
 
         schools = []
         for n in elements:
