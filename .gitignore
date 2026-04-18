@@ -1,16 +1,15 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.venv/
-venv/
-env/
-*.egg-info/
-dist/
-build/
-
-# Data files
+# ── Data files ──────────────────────────────────────────────────────────────
+# Processed outputs (large, reproducible via pipelines)
+data/processed/
+data/raw/
 aadt_data/
+
+# Keep directory structure but not the files
+!data/.gitkeep
+!data/processed/.gitkeep
+!data/raw/.gitkeep
+
+# Spatial / GIS raw files
 *.shp
 *.dbf
 *.shx
@@ -18,14 +17,49 @@ aadt_data/
 *.cpg
 *.zip
 
-# Environment
-.env
-*.env
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
 
-# OS
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Environment / Secrets ────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+secrets.yaml
+secrets.json
+census_api_key.txt
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Testing / Coverage ───────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
