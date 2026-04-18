@@ -12,3 +12,5 @@ geopy==2.4.1
 pandas==2.2.3
 numpy>=1.24,<2.1
 python-multipart==0.0.20
+# TinyFish AI: REST API calls made via requests (no pip package)
+# Set TINYFISH_API_KEY in .env to enable live hotspot + amenity scraping

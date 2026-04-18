@@ -16,7 +16,7 @@ import {
 
 interface ScoreCardProps {
   result: AnalysisResult;
-  brand: "walmart" | "target";
+  brand: string;
 }
 
 function getRankColor(score: number): string {
@@ -46,7 +46,7 @@ function formatVisits(n: number): string {
 }
 
 export default function ScoreCard({ result, brand }: ScoreCardProps) {
-  const { score, demographics, competitors, simulation, neighborhood, brand_fit } = result;
+  const { score, demographics, competitors, simulation, neighborhood, brand_fit, hotspot, amenity } = result;
   const rankColor = getRankColor(score.total_score);
 
   const radarData = [
@@ -56,6 +56,8 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
     { dim: "Neighborhood", value: score.neighborhood_score },
     { dim: "Brand Fit", value: score.brand_fit_score },
     { dim: "Risk", value: score.risk_score },
+    { dim: "Hotspot", value: score.hotspot_score ?? 55 },
+    { dim: "Amenity", value: score.amenity_score ?? 65 },
   ];
 
   const forecastData = [
@@ -68,21 +70,23 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
   ];
 
   const dimensions = [
-    { label: "Market Demand", key: "demand_score", score: score.demand_score },
-    { label: "Competitive Position", key: "competition_score", score: score.competition_score },
-    { label: "Accessibility", key: "accessibility_score", score: score.accessibility_score },
-    { label: "Neighborhood Quality", key: "neighborhood_score", score: score.neighborhood_score },
-    { label: "Brand Fit", key: "brand_fit_score", score: score.brand_fit_score },
-    { label: "Risk Profile", key: "risk_score", score: score.risk_score },
+    { label: "Market Demand", score: score.demand_score },
+    { label: "Competitive Position", score: score.competition_score },
+    { label: "Accessibility", score: score.accessibility_score },
+    { label: "Neighborhood Quality", score: score.neighborhood_score },
+    { label: "Brand Fit", score: score.brand_fit_score },
+    { label: "Risk Profile", score: score.risk_score },
+    { label: "🔥 Hotspot (TinyFish)", score: score.hotspot_score ?? 55 },
+    { label: "🏗️ Amenity", score: score.amenity_score ?? 65 },
   ];
 
-  const brandColor = brand === "walmart" ? "#004c91" : "#cc0000";
+  const brandColor = "#00d4ff";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "auto" }}>
       {/* Score Header */}
       <div className="score-header">
-        <div style={{ display: "flex", align: "flex-start", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
             <div className="score-big">{score.total_score.toFixed(0)}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
@@ -134,15 +138,14 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
           style={{
             marginTop: 10,
             padding: "8px 10px",
-            background: `rgba(${brand === "walmart" ? "0,76,145" : "204,0,0"},0.12)`,
-            border: `1px solid rgba(${brand === "walmart" ? "0,76,145" : "204,0,0"},0.3)`,
+            background: "rgba(0,212,255,0.08)",
+            border: "1px solid rgba(0,212,255,0.25)",
             borderRadius: 6,
             fontSize: 11,
-            color: brand === "walmart" ? "#5aa3e8" : "#f87171",
+            color: "#00d4ff",
           }}
         >
-          <strong>{brand === "walmart" ? "🔵 Walmart" : "🔴 Target"}</strong> ·{" "}
-          {brand_fit.recommended_format}
+          <strong>🎯 {brand}</strong> · {brand_fit.recommended_format}
         </div>
       </div>
 
@@ -166,6 +169,87 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
           </div>
         ))}
       </div>
+
+      {/* TinyFish Hotspot Panel */}
+      {hotspot && (
+        <div className="hotspot-panel">
+          <div className="hotspot-header">
+            <span>🔥 Present-Time Hotspot</span>
+            <span className={"hotspot-badge " + (hotspot.tinyfish_powered ? "tf-live" : "tf-proxy")}>
+              {hotspot.tinyfish_powered ? "TinyFish LIVE" : "Proxy Mode"}
+            </span>
+          </div>
+          <div className="hotspot-narrative">{hotspot.narrative}</div>
+          {hotspot.trending_categories.length > 0 && (
+            <div className="hotspot-cats">
+              {hotspot.trending_categories.slice(0, 4).map((c) => (
+                <span key={c} className="hotspot-cat-chip">{c}</span>
+              ))}
+            </div>
+          )}
+          <div className="hotspot-stats">
+            <div className="hs-stat">
+              <div className="hs-stat-val">{hotspot.new_openings_count}</div>
+              <div className="hs-stat-lbl">New openings</div>
+            </div>
+            <div className="hs-stat">
+              <div className="hs-stat-val">{hotspot.loopnet_active_listings}</div>
+              <div className="hs-stat-lbl">Available spaces</div>
+            </div>
+            <div className="hs-stat">
+              <div className="hs-stat-val">{hotspot.permit_activity_score.toFixed(0)}</div>
+              <div className="hs-stat-lbl">Permit score</div>
+            </div>
+          </div>
+          {hotspot.signals.slice(0, 3).map((sig, i) => (
+            <div key={i} className="hotspot-signal">
+              <span className="sig-source">{sig.source}</span>
+              <span className="sig-title">{sig.title.slice(0, 60)}</span>
+              <span className="sig-strength">↑{(sig.signal_strength * 100).toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Amenity Panel */}
+      {amenity && (
+        <div className="amenity-panel">
+          <div className="hotspot-header">
+            <span>🏗️ Infrastructure & Amenity</span>
+            <span className={"hotspot-badge " + (amenity.tinyfish_powered ? "tf-live" : "tf-proxy")}>
+              {amenity.tinyfish_powered ? "TinyFish + OSM" : "OSM + FCC"}
+            </span>
+          </div>
+          <div className="amenity-bars">
+            {[
+              ["⚡ Power", amenity.power_infrastructure_score],
+              ["💧 Water/Sewer", amenity.water_sewer_score],
+              ["🌐 Broadband", amenity.internet_reliability_score],
+              ["📋 Zoning", amenity.zoning_compatibility_score],
+              ["🚧 Development", amenity.development_activity_score],
+            ].map(([label, val]) => (
+              <div key={label as string} className="amenity-row">
+                <span className="amenity-lbl">{label as string}</span>
+                <div className="amenity-bar">
+                  <div
+                    className="amenity-fill"
+                    style={{ width: `${val as number}%`, background: getDimColor(val as number) }}
+                  />
+                </div>
+                <span className="amenity-val">{(val as number).toFixed(0)}</span>
+              </div>
+            ))}
+          </div>
+          {amenity.available_commercial_spaces > 0 && (
+            <div className="amenity-spaces">
+              🏢 {amenity.available_commercial_spaces} commercial spaces available
+              {amenity.available_space_types.length > 0 && (
+                <> ({amenity.available_space_types.join(", ")})</>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Key metrics */}
       <div className="metrics-grid">
@@ -245,7 +329,7 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
               borderRadius: 6,
               fontSize: 11,
             }}
-            formatter={(v: number) => [`$${(v / 1e6).toFixed(2)}M`, "Revenue"]}
+            formatter={(v) => [`$${(Number(v) / 1e6).toFixed(2)}M`, "Revenue"] as [string, string]}
             labelStyle={{ color: "#7a9ab8" }}
           />
           <Area

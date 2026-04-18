@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import AgentTrace from "@/components/AgentTrace";
 import ScoreCard from "@/components/ScoreCard";
+import BrandSelector from "@/components/BrandSelector";
 import {
   getCandidates,
   getCompetitors,
@@ -11,17 +12,22 @@ import {
   type CandidateSite,
   type CompetitorStore,
   type TraceEvent,
+  type RetailerProfile,
 } from "@/lib/api";
 
 // SSR-safe Leaflet map
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
+
+const DEFAULT_RETAILER: RetailerProfile = {
+  brand_name: "Walmart",
+};
 
 export default function Home() {
   const [candidates, setCandidates] = useState<CandidateSite[]>([]);
   const [competitors, setCompetitors] = useState<CompetitorStore[]>([]);
   const [selectedSite, setSelectedSite] = useState<CandidateSite | null>(null);
   const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [brand, setBrand] = useState<"walmart" | "target">("walmart");
+  const [retailer, setRetailer] = useState<RetailerProfile>(DEFAULT_RETAILER);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -52,10 +58,24 @@ export default function Home() {
     setError(null);
   }, []);
 
+  const handleRetailerChange = useCallback((profile: RetailerProfile) => {
+    setRetailer(profile);
+    setResult(null);
+    setTraceEvents([]);
+  }, []);
+
   const handleAnalyze = useCallback(() => {
     const target = droppedPin;
     if (!target) {
       setError("Select a candidate site or click the map to place a pin first.");
+      return;
+    }
+
+    // Validate retailer has at least one valid input
+    const hasKnownBrand = !!retailer.brand_name?.trim();
+    const hasCustomSpec = !!(retailer.store_size && retailer.categories?.length);
+    if (!hasKnownBrand && !hasCustomSpec) {
+      setError("Please complete your retailer profile — enter a brand name or select store size + category.");
       return;
     }
 
@@ -66,7 +86,13 @@ export default function Home() {
     setError(null);
 
     const stop = streamAnalysis(
-      { lat: target.lat, lng: target.lng, brand, radius_miles: 10 },
+      {
+        lat: target.lat,
+        lng: target.lng,
+        retailer,
+        radius_miles: 10,
+        region_city: "Phoenix, AZ",
+      },
       (event) => setTraceEvents((prev) => [...prev, event]),
       (res) => setResult(res),
       (err) => {
@@ -76,10 +102,14 @@ export default function Home() {
       () => setIsAnalyzing(false)
     );
     stopRef.current = stop;
-  }, [droppedPin, brand]);
+  }, [droppedPin, retailer]);
 
   const activeTarget = droppedPin;
   const canAnalyze = !!activeTarget && !isAnalyzing;
+
+  // Display brand name for header/badges
+  const displayBrand = retailer.brand_name ||
+    (retailer.categories?.map((c) => c.replace("_", " ")).join(" + ") || "Custom Store");
 
   return (
     <div className="app-layout">
@@ -90,14 +120,15 @@ export default function Home() {
             <span>📍</span> RetailIQ
           </div>
           <span className="logo-subtitle">
-            AI-Powered Superstore Site Intelligence · Phoenix Metro Demo
+            AI-Powered Site Selection Intelligence · Phoenix Metro
           </span>
         </div>
         <div className="header-meta">
           <div className="meta-badge">
             <div className="dot" />
-            Agents Online
+            8 Agents Online
           </div>
+          <div className="meta-badge">🔥 TinyFish Hotspot</div>
           <div className="meta-badge">🏪 Phoenix, AZ Metro</div>
           <div className="meta-badge">📊 Census ACS + OSM Live</div>
         </div>
@@ -105,25 +136,10 @@ export default function Home() {
 
       {/* ── Left Panel ── */}
       <aside className="left-panel">
-        {/* Brand selector */}
+        {/* Brand / Store Selector */}
         <div className="panel-section">
-          <div className="panel-section-title">Select Retailer Brand</div>
-          <div className="brand-selector">
-            <button
-              className={`brand-btn walmart ${brand === "walmart" ? "active" : ""}`}
-              onClick={() => { setBrand("walmart"); setResult(null); setTraceEvents([]); }}
-            >
-              <span className="brand-icon">🔵</span>
-              <span>Walmart</span>
-            </button>
-            <button
-              className={`brand-btn target ${brand === "target" ? "active" : ""}`}
-              onClick={() => { setBrand("target"); setResult(null); setTraceEvents([]); }}
-            >
-              <span className="brand-icon">🔴</span>
-              <span>Target</span>
-            </button>
-          </div>
+          <div className="panel-section-title">Retailer Profile</div>
+          <BrandSelector value={retailer} onChange={handleRetailerChange} />
         </div>
 
         {/* Candidate sites */}
@@ -133,6 +149,7 @@ export default function Home() {
             {candidates.map((site) => (
               <button
                 key={site.id}
+                id={`candidate-${site.id}`}
                 className={`candidate-item ${selectedSite?.id === site.id ? "active" : ""}`}
                 onClick={() => handleSiteSelect(site)}
               >
@@ -168,9 +185,9 @@ export default function Home() {
               )}
             </div>
             <div style={{ fontSize: 11, color: "#3d5a73" }}>
-              Brand:{" "}
-              <span style={{ color: brand === "walmart" ? "#5aa3e8" : "#f87171", fontWeight: 700 }}>
-                {brand.charAt(0).toUpperCase() + brand.slice(1)}
+              Retailer:{" "}
+              <span style={{ color: "#00d4ff", fontWeight: 700 }}>
+                {displayBrand}
               </span>
             </div>
           </div>
@@ -193,6 +210,7 @@ export default function Home() {
 
         {/* Analyze button */}
         <button
+          id="run-analysis-btn"
           className={`analyze-btn ${isAnalyzing ? "running" : ""}`}
           onClick={handleAnalyze}
           disabled={!canAnalyze}
@@ -200,12 +218,10 @@ export default function Home() {
           {isAnalyzing ? (
             <>
               <div className="spinner" />
-              Running Analysis...
+              Running 8-Agent Analysis...
             </>
           ) : (
-            <>
-              ⚡ Run AI Analysis
-            </>
+            <>⚡ Run AI Analysis</>
           )}
         </button>
 
@@ -218,11 +234,11 @@ export default function Home() {
             lineHeight: 1.8,
           }}
         >
-          Data: Census ACS · OSM/Overpass · NCES
+          Data: Census ACS · OSM/Overpass · FCC Broadband · NCES
           <br />
-          AI: Gemini 2.0 Flash · 5-Agent Pipeline
+          AI: Gemini 2.0 Flash · 8-Agent Pipeline
           <br />
-          <span style={{ color: "#4f378b" }}>Foot Traffic: Placer.ai Proxy Model</span>
+          <span style={{ color: "#0ea5e9" }}>🐟 TinyFish AI · Live Hotspot Detection</span>
         </div>
       </aside>
 
@@ -235,7 +251,7 @@ export default function Home() {
           droppedPin={droppedPin}
           onSiteSelect={handleSiteSelect}
           onPinDrop={handlePinDrop}
-          brand={brand}
+          brand={retailer.brand_name?.toLowerCase() || "custom"}
           isAnalyzing={isAnalyzing}
         />
       </main>
@@ -243,7 +259,7 @@ export default function Home() {
       {/* ── Right Panel ── */}
       <aside className="right-panel">
         {result ? (
-          <ScoreCard result={result} brand={brand} />
+          <ScoreCard result={result} brand={result.brand} />
         ) : (
           <>
             {/* Agent Trace always shows when running */}
@@ -273,8 +289,8 @@ export default function Home() {
                 <div className="empty-icon">🗺️</div>
                 <div className="empty-title">Select a Location</div>
                 <div className="empty-desc">
-                  Choose a candidate site from the list or click the map to drop a pin,
-                  then run the AI analysis to see a full market simulation.
+                  Choose a candidate site or click the map to drop a pin,
+                  then configure your retailer profile and run the AI analysis.
                 </div>
                 <div
                   style={{
@@ -287,12 +303,15 @@ export default function Home() {
                     paddingLeft: 10,
                   }}
                 >
-                  5 AI agents will analyze:
+                  8 AI agents will analyze:
+                  <br />🔍 Brand DNA Resolver (Gemini)
                   <br />📊 Demographics (Census ACS)
                   <br />🏪 Competitors (OpenStreetMap)
                   <br />🎓 Schools (NCES)
+                  <br />🔥 Hotspot Signals (TinyFish)
                   <br />🧠 Market Simulation (Gemini)
                   <br />🎯 Brand Fit Scoring
+                  <br />🏗️ Amenity Intelligence (OSM + FCC)
                 </div>
               </div>
             )}

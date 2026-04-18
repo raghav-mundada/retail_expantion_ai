@@ -1,13 +1,34 @@
-// API client for RetailIQ backend
+// API client for RetailIQ backend — v2 (universal retailer input)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+// ── Retailer Input ────────────────────────────────────────────────────────────
+
+export type StoreSizeEnum = "small" | "medium" | "large" | "big_box";
+export type ProductCategory =
+  | "grocery" | "liquor" | "apparel" | "electronics"
+  | "general_merchandise" | "hardware" | "pharmacy" | "specialty"
+  | "restaurant" | "home_goods" | "sporting_goods" | "pet_supplies";
+export type PricePositioning = "budget" | "mid_range" | "premium";
+
+export interface RetailerProfile {
+  // Path A: known brand (at least one of these must be set)
+  brand_name?: string;
+  // Path B: custom store spec
+  store_size?: StoreSizeEnum;
+  categories?: ProductCategory[];
+  price_positioning?: PricePositioning;
+}
 
 export interface AnalyzeRequest {
   lat: number;
   lng: number;
-  brand: "walmart" | "target";
+  retailer: RetailerProfile;
   radius_miles?: number;
+  region_city?: string;
 }
+
+// ── Domain Models ─────────────────────────────────────────────────────────────
 
 export interface CompetitorStore {
   brand_name: string;
@@ -35,6 +56,7 @@ export interface CompetitorProfile {
   stores: CompetitorStore[];
   total_count: number;
   big_box_count: number;
+  same_category_count?: number;
   saturation_score: number;
   demand_signal_score: number;
   competition_score: number;
@@ -48,6 +70,63 @@ export interface NeighborhoodProfile {
   housing_growth_signal: number;
   overall_score: number;
 }
+
+// ── NEW: Hotspot (TinyFish Layer 1) ──────────────────────────────────────────
+
+export interface RetailSignal {
+  source: string; // "yelp_new" | "news" | "permit" | "loopnet" | "search"
+  title: string;
+  signal_strength: number; // 0–1
+  category?: string;
+  url?: string;
+  recency_days: number;
+  sentiment: string;
+}
+
+export interface HotspotProfile {
+  hotspot_score: number;
+  signals: RetailSignal[];
+  trending_categories: string[];
+  new_openings_count: number;
+  permit_activity_score: number;
+  loopnet_active_listings: number;
+  narrative: string;
+  tinyfish_powered: boolean;
+}
+
+// ── NEW: Amenity (Infrastructure) ────────────────────────────────────────────
+
+export interface AmenityProfile {
+  power_infrastructure_score: number;
+  water_sewer_score: number;
+  internet_reliability_score: number;
+  available_commercial_spaces: number;
+  zoning_compatibility_score: number;
+  development_activity_score: number;
+  overall_amenity_score: number;
+  available_space_types: string[];
+  tinyfish_powered: boolean;
+}
+
+// ── NEW: Brand DNA ────────────────────────────────────────────────────────────
+
+export interface BrandDNA {
+  display_name: string;
+  ideal_income_low: number;
+  ideal_income_high: number;
+  ideal_population_min: number;
+  footprint_sqft: number;
+  primary_categories: string[];
+  price_positioning: string;
+  store_format: string;
+  family_skew: boolean;
+  college_edu_skew: boolean;
+  known_brand: boolean;
+  expansion_velocity: string;
+  reasoning: string;
+}
+
+// ── Simulation & Brand Fit ────────────────────────────────────────────────────
 
 export interface SimulationResult {
   simulated_households: number;
@@ -71,6 +150,8 @@ export interface BrandFitProfile {
   reasoning: string;
 }
 
+// ── Location Score (8 dimensions) ────────────────────────────────────────────
+
 export interface LocationScore {
   total_score: number;
   demand_score: number;
@@ -79,24 +160,34 @@ export interface LocationScore {
   neighborhood_score: number;
   brand_fit_score: number;
   risk_score: number;
+  hotspot_score: number;       // NEW
+  amenity_score: number;       // NEW
   rank_label: string;
   why_this_wins: string[];
   top_risks: string[];
 }
+
+// ── Full Analysis Result ──────────────────────────────────────────────────────
 
 export interface AnalysisResult {
   lat: number;
   lng: number;
   brand: string;
   address_label: string;
+  retailer_profile?: RetailerProfile;
+  brand_dna?: BrandDNA;
   demographics: DemographicsProfile;
   competitors: CompetitorProfile;
   neighborhood: NeighborhoodProfile;
+  hotspot?: HotspotProfile;    // NEW — TinyFish Layer 1
+  amenity?: AmenityProfile;    // NEW — Infrastructure
   simulation: SimulationResult;
   brand_fit: BrandFitProfile;
   score: LocationScore;
   agent_trace: Record<string, unknown>[];
 }
+
+// ── Other Models ──────────────────────────────────────────────────────────────
 
 export interface CandidateSite {
   id: string;
@@ -114,6 +205,8 @@ export interface TraceEvent {
   message: string;
   data?: Record<string, unknown>;
 }
+
+// ── API Functions ─────────────────────────────────────────────────────────────
 
 export async function getCandidates(): Promise<CandidateSite[]> {
   const res = await fetch(`${API_BASE}/candidates`);

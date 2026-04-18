@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/demographics_household_income",
+  "title": "Demographics & Household Income Data",
+  "description": "Layer 2 stub — normalized demographics. Wire in your enhanced Census/ACS API or Esri Business Analyst data here.",
+  "type": "object",
+  "required": ["lat", "lng", "radius_miles"],
+  "properties": {
+    "lat": { "type": "number" },
+    "lng": { "type": "number" },
+    "radius_miles": { "type": "number" },
+    "population": { "type": "integer" },
+    "household_count": { "type": "integer" },
+    "median_household_income": { "type": "number" },
+    "mean_household_income": { "type": "number" },
+    "per_capita_income": { "type": "number" },
+    "income_quintile_distribution": {
+      "type": "object",
+      "description": "% of HHs in each income quintile",
+      "properties": {
+        "q1_under_30k": { "type": "number" },
+        "q2_30k_55k": { "type": "number" },
+        "q3_55k_90k": { "type": "number" },
+        "q4_90k_150k": { "type": "number" },
+        "q5_over_150k": { "type": "number" }
+      }
+    },
+    "median_age": { "type": "number" },
+    "family_households_pct": { "type": "number" },
+    "owner_occupied_pct": { "type": "number" },
+    "avg_household_size": { "type": "number" },
+    "college_educated_pct": { "type": "number" },
+    "population_growth_5yr_pct": { "type": "number" },
+    "daytime_population": { "type": "integer", "description": "Workers + residents during business hours" },
+    "consumer_spending_retail_annual": { "type": "number", "description": "Total $ spent at retail in trade area" },
+    "source": { "type": "string", "enum": ["census_acs", "esri", "claritas", "manual"] },
+    "vintage_year": { "type": "integer", "description": "Data vintage year, e.g. 2023" }
+  },
+  "_tinyfish_note": "TinyFish can normalize and extract from Esri Community Analyst, PolicyMap, or Social Explorer when paid APIs are available."
+}

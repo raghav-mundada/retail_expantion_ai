@@ -9,7 +9,7 @@ interface MapProps {
   droppedPin: { lat: number; lng: number } | null;
   onSiteSelect: (site: CandidateSite) => void;
   onPinDrop: (lat: number, lng: number) => void;
-  brand: "walmart" | "target";
+  brand: string;
   isAnalyzing: boolean;
 }
 

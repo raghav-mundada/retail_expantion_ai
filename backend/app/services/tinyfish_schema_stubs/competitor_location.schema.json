@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/competitor_location",
+  "title": "Competitor Store Location Data",
+  "description": "Layer 2 stub — normalized competitor store data. Wire in Placer.ai, SafeGraph, or your geographic data API here.",
+  "type": "object",
+  "required": ["stores"],
+  "properties": {
+    "stores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["brand_name", "lat", "lng", "distance_miles"],
+        "properties": {
+          "brand_name": { "type": "string" },
+          "lat": { "type": "number" },
+          "lng": { "type": "number" },
+          "distance_miles": { "type": "number" },
+          "store_type": { "type": "string" },
+          "sqft": { "type": "integer" },
+          "annual_visits_est": { "type": "integer", "description": "Estimated annual foot traffic (Placer.ai)" },
+          "avg_dwell_minutes": { "type": "number" },
+          "peak_hour": { "type": "string" },
+          "customer_income_median": { "type": "number" },
+          "opened_year": { "type": "integer" },
+          "yelp_rating": { "type": "number" },
+          "source": { "type": "string", "enum": ["osm", "placer_ai", "safegraph", "manual"] }
+        }
+      }
+    },
+    "trade_area_saturation": { "type": "number", "minimum": 0, "maximum": 100 },
+    "same_category_count": { "type": "integer" }
+  },
+  "_tinyfish_note": "TinyFish can scrape store locator pages (Walmart.com, Target.com, Costco.com) to get precise store locations when OSM data is missing."
+}
