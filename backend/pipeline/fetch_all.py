@@ -381,10 +381,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Pull all retail expansion data sources into one JSON."
     )
-    parser.add_argument("--lat",    type=float, required=True,  help="Center latitude")
-    parser.add_argument("--lon",    type=float, required=True,  help="Center longitude")
-    parser.add_argument("--radius", type=float, default=10.0,   help="Radius in km (default: 10)")
-    parser.add_argument("--out",    type=str,   default=None,   help="Custom output JSON path")
+    parser.add_argument("--lat",    type=float, default=44.977,  help="Center latitude  (default: Minneapolis)")
+    parser.add_argument("--lon",    type=float, default=-93.265, help="Center longitude (default: Minneapolis)")
+    parser.add_argument("--radius", type=float, default=10.0,    help="Radius in km     (default: 10)")
+    parser.add_argument("--out",    type=str,   default=None,    help="Custom output JSON path")
     args = parser.parse_args()
 
     out = Path(args.out) if args.out else None
