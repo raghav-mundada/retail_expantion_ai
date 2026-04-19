@@ -93,39 +93,13 @@ export function MapPicker({ onAnalyze }: Props) {
   function handleLatChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
     setLatInput(raw);
-
-    if (raw.trim() === "") {
-      setPin(null);
-      setInputError(null);
-      return;
-    }
-
+    if (raw.trim() === "") { setPin(null); setInputError(null); return; }
     const val = parseFloat(raw);
-    if (isNaN(val)) {
-      setInputError("Invalid latitude");
-      return;
-    }
-    if (val < LAT_MIN || val > LAT_MAX) {
-      setInputError(`Latitude must be ${LAT_MIN} – ${LAT_MAX}`);
-      return;
-    }
-
-    if (lonInput.trim() === "") {
-      setPin(null);
-      setInputError(null);
-      return;
-    }
-
+    if (isNaN(val)) { setInputError("Invalid latitude"); return; }
+    if (val < LAT_MIN || val > LAT_MAX) { setInputError(`Latitude must be ${LAT_MIN} – ${LAT_MAX}`); return; }
+    if (lonInput.trim() === "") { setPin(null); setInputError(null); return; }
     const lonVal = parseFloat(lonInput);
-    if (isNaN(lonVal)) {
-      setInputError("Invalid longitude");
-      return;
-    }
-    if (lonVal < LON_MIN || lonVal > LON_MAX) {
-      setInputError(`Longitude must be ${LON_MIN} – ${LON_MAX}`);
-      return;
-    }
-
+    if (isNaN(lonVal) || lonVal < LON_MIN || lonVal > LON_MAX) { setInputError("Fix longitude first"); return; }
     setInputError(null);
     setPin({ lat: val, lon: lonVal });
   }
@@ -133,39 +107,13 @@ export function MapPicker({ onAnalyze }: Props) {
   function handleLonChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
     setLonInput(raw);
-
-    if (raw.trim() === "") {
-      setPin(null);
-      setInputError(null);
-      return;
-    }
-
+    if (raw.trim() === "") { setPin(null); setInputError(null); return; }
     const val = parseFloat(raw);
-    if (isNaN(val)) {
-      setInputError("Invalid longitude");
-      return;
-    }
-    if (val < LON_MIN || val > LON_MAX) {
-      setInputError(`Longitude must be ${LON_MIN} – ${LON_MAX}`);
-      return;
-    }
-
-    if (latInput.trim() === "") {
-      setPin(null);
-      setInputError(null);
-      return;
-    }
-
+    if (isNaN(val)) { setInputError("Invalid longitude"); return; }
+    if (val < LON_MIN || val > LON_MAX) { setInputError(`Longitude must be ${LON_MIN} – ${LON_MAX}`); return; }
+    if (latInput.trim() === "") { setPin(null); setInputError(null); return; }
     const latVal = parseFloat(latInput);
-    if (isNaN(latVal)) {
-      setInputError("Invalid latitude");
-      return;
-    }
-    if (latVal < LAT_MIN || latVal > LAT_MAX) {
-      setInputError(`Latitude must be ${LAT_MIN} – ${LAT_MAX}`);
-      return;
-    }
-
+    if (isNaN(latVal) || latVal < LAT_MIN || latVal > LAT_MAX) { setInputError("Fix latitude first"); return; }
     setInputError(null);
     setPin({ lat: latVal, lon: val });
   }
@@ -207,21 +155,23 @@ export function MapPicker({ onAnalyze }: Props) {
         )}
       </MapContainer>
 
+      {/* Hero overlay — draggable, top left */}
       <motion.div
+        drag
+        dragMomentum={false}
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-8 left-8 max-w-xs z-[1000]"
+        className="absolute top-8 left-8 max-w-xs z-[1000] cursor-grab active:cursor-grabbing"
       >
         <div className="bg-snow/95 border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] backdrop-blur-sm">
           <button
             onClick={() => setHeroOpen((h) => !h)}
+            onPointerDown={(e) => e.stopPropagation()}
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-bone transition"
           >
             <span className="label-xs">CHAPTER ONE — LOCATE</span>
-            <span className="font-mono text-mist text-sm leading-none">
-              {heroOpen ? "−" : "+"}
-            </span>
+            <span className="font-mono text-mist text-sm leading-none">{heroOpen ? "−" : "+"}</span>
           </button>
           {heroOpen && (
             <div className="px-4 pb-4 border-t border-hairline">
@@ -252,27 +202,30 @@ export function MapPicker({ onAnalyze }: Props) {
         </div>
       </motion.div>
 
+      {/* Pick panel — draggable, right side, normal top-to-bottom order */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-8 right-8 z-[1000] w-[440px] max-h-[calc(100vh-4rem)] flex flex-col justify-end"
+        className="absolute bottom-8 right-8 z-[1000] w-[440px]"
       >
         <div className="bg-snow border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] overflow-hidden">
+
+          {/* Header — collapse toggle, always at TOP */}
           <button
             onClick={() => setPanelOpen((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-bone transition border-t border-hairline flex-shrink-0"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-bone transition border-b border-hairline"
           >
             <div className="flex items-center gap-2">
               <span className="label-xs">SITE SELECTION</span>
               {ready && <span className="w-1.5 h-1.5 rounded-full bg-emerald" />}
             </div>
-            <span className="font-mono text-mist text-sm leading-none">
-              {panelOpen ? "−" : "+"}
-            </span>
+            <span className="font-mono text-mist text-sm leading-none">{panelOpen ? "−" : "+"}</span>
           </button>
 
-          <div className="px-6 py-4 flex items-center justify-between border-t border-hairline flex-shrink-0">
+          {/* Pin status — always visible below header */}
+          <div className="px-6 py-4 flex items-center justify-between border-b border-hairline">
             <div className="flex items-center gap-2">
               <MapPin className={`w-3.5 h-3.5 ${ready ? "text-emerald" : "text-mist"}`} strokeWidth={1.5} />
               <span className="label-xs">
@@ -282,43 +235,50 @@ export function MapPicker({ onAnalyze }: Props) {
               </span>
             </div>
             {(pin || latInput || lonInput) && (
-              <button onClick={handleReset} className="label-xs hover:text-ink transition">
+              <button
+                onClick={handleReset}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="label-xs hover:text-ink transition"
+              >
                 Reset
               </button>
             )}
           </div>
 
+          {/* Collapsible form content */}
           {panelOpen && (
-            <div className="overflow-y-auto max-h-[calc(100vh-14rem)] flex flex-col">
-              <div className="grid grid-cols-2 border-b border-hairline flex-shrink-0">
+            <div className="overflow-y-auto max-h-[calc(100vh-14rem)]">
+
+              {/* Mode toggle */}
+              <div className="grid grid-cols-2 border-b border-hairline">
                 <button
                   onClick={() => setMode("manual")}
+                  onPointerDown={(e) => e.stopPropagation()}
                   className={`px-4 py-3 flex items-center justify-center gap-2 transition
                     ${mode === "manual" ? "bg-ink text-snow" : "bg-snow text-graphite hover:text-ink"}`}
                 >
                   <Crosshair className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span className="label-xs" style={{ color: mode === "manual" ? "white" : undefined }}>
-                    MANUAL
-                  </span>
+                  <span className="label-xs" style={{ color: mode === "manual" ? "white" : undefined }}>MANUAL</span>
                 </button>
                 <button
                   onClick={() => setMode("scout")}
+                  onPointerDown={(e) => e.stopPropagation()}
                   className={`px-4 py-3 flex items-center justify-center gap-2 transition border-l border-hairline
                     ${mode === "scout" ? "bg-ink text-snow" : "bg-snow text-graphite hover:text-ink"}`}
                 >
                   <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span className="label-xs" style={{ color: mode === "scout" ? "white" : undefined }}>
-                    AUTO-SCOUT
-                  </span>
+                  <span className="label-xs" style={{ color: mode === "scout" ? "white" : undefined }}>AUTO-SCOUT</span>
                 </button>
               </div>
 
-              <div className="p-5 border-b border-hairline flex-shrink-0">
+              {/* Store format */}
+              <div className="p-5 border-b border-hairline">
                 <div className="label-xs mb-2">STORE FORMAT</div>
                 <StoreFormatPicker value={format} onChange={setFormat} />
               </div>
 
-              <div className="grid grid-cols-2 border-b border-hairline flex-shrink-0">
+              {/* Coords */}
+              <div className="grid grid-cols-2 border-b border-hairline">
                 <div className="p-5 border-r border-hairline">
                   <div className="label-xs mb-2">LATITUDE</div>
                   <input
@@ -327,9 +287,8 @@ export function MapPicker({ onAnalyze }: Props) {
                     placeholder="44.9778"
                     value={latInput}
                     onChange={handleLatChange}
-                    onBlur={() => {
-                      if (pin && !inputError) setLatInput(pin.lat.toFixed(4));
-                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onBlur={() => { if (pin && !inputError) setLatInput(pin.lat.toFixed(4)); }}
                     className={`font-mono text-base tabular text-ink bg-transparent w-full outline-none
                       border-b pb-1 transition-colors placeholder:text-mist
                       ${inputError ? "border-red-400" : "border-hairline focus:border-ink"}`}
@@ -343,9 +302,8 @@ export function MapPicker({ onAnalyze }: Props) {
                     placeholder="-93.2650"
                     value={lonInput}
                     onChange={handleLonChange}
-                    onBlur={() => {
-                      if (pin && !inputError) setLonInput(pin.lon.toFixed(4));
-                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onBlur={() => { if (pin && !inputError) setLonInput(pin.lon.toFixed(4)); }}
                     className={`font-mono text-base tabular text-ink bg-transparent w-full outline-none
                       border-b pb-1 transition-colors placeholder:text-mist
                       ${inputError ? "border-red-400" : "border-hairline focus:border-ink"}`}
@@ -353,32 +311,27 @@ export function MapPicker({ onAnalyze }: Props) {
                 </div>
               </div>
 
+              {/* Validation error */}
               {inputError && (
-                <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2 flex-shrink-0">
+                <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
                   <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" strokeWidth={1.5} />
                   <span className="text-xs text-red-600 font-mono">{inputError}</span>
                 </div>
               )}
 
-              <div className="p-6 border-b border-hairline flex-shrink-0">
+              {/* Radius */}
+              <div className="p-6 border-b border-hairline">
                 <div className="flex items-baseline justify-between mb-3">
-                  <span className="label-xs">
-                    {isScout ? "SEARCH AREA RADIUS" : "CATCHMENT RADIUS"}
-                  </span>
+                  <span className="label-xs">{isScout ? "SEARCH AREA RADIUS" : "CATCHMENT RADIUS"}</span>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="font-display text-3xl tabular text-ink leading-none">
-                      {radius.toFixed(1)}
-                    </span>
+                    <span className="font-display text-3xl tabular text-ink leading-none">{radius.toFixed(1)}</span>
                     <span className="label-sm">KM</span>
                   </div>
                 </div>
                 <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  value={radius}
+                  type="range" min={1} max={10} step={0.5} value={radius}
                   onChange={(e) => setRadius(parseFloat(e.target.value))}
+                  onPointerDown={(e) => e.stopPropagation()}
                   className="w-full accent-emerald"
                 />
                 <div className="flex justify-between mt-2 label-xs">
@@ -386,27 +339,19 @@ export function MapPicker({ onAnalyze }: Props) {
                 </div>
                 {isScout && (
                   <div className="mt-3 text-[11px] text-graphite leading-relaxed">
-                    We'll score every retail-compatible parcel inside this circle and
-                    surface the top 3 — spaced at least{" "}
+                    We'll score every retail-compatible parcel inside this circle and surface the top 3 — spaced at least{" "}
                     <span className="text-ink font-medium">{(radius / 4).toFixed(1)} km</span> apart.
                   </div>
                 )}
               </div>
 
+              {/* CTA */}
               <button
-                onClick={() =>
-                  pin &&
-                  onAnalyze({
-                    mode,
-                    lat: pin.lat,
-                    lon: pin.lon,
-                    radius_km: radius,
-                    store_format: format,
-                  })
-                }
+                onClick={() => pin && onAnalyze({ mode, lat: pin.lat, lon: pin.lon, radius_km: radius, store_format: format })}
+                onPointerDown={(e) => e.stopPropagation()}
                 disabled={!ready}
                 className="w-full bg-ink text-snow py-5 px-6 flex items-center justify-between
-                           transition-all duration-300 hover:bg-graphite flex-shrink-0
+                           transition-all duration-300 hover:bg-graphite
                            disabled:bg-bone disabled:text-mist disabled:cursor-not-allowed group"
               >
                 <span className="text-sm font-medium tracking-snug">
@@ -419,6 +364,7 @@ export function MapPicker({ onAnalyze }: Props) {
         </div>
       </motion.div>
 
+      {/* Bottom-left context strip */}
       <div className="absolute bottom-8 left-8 z-[1000] bg-paper/80 backdrop-blur-sm px-3 py-2">
         <div className="flex items-center gap-3 text-graphite">
           <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
