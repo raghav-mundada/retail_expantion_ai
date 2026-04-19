@@ -38,6 +38,11 @@ aadt_data/
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
+
+# ── Frontend build artifacts ─────────────────────────────────────────────────
+frontend/.vite/
+frontend/dist/
+frontend/node_modules/
 *.py[cod]
 *.pyo
 *.pyd
