@@ -9,7 +9,9 @@ pipeline entirely and return the cached run_id from Supabase — so the
 frontend never waits 20 seconds for data it already has.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
 from backend.db.client import get_client
 from backend.db.persist_run import persist_run
 from backend.pipeline.fetch_all import run_all
@@ -17,18 +19,28 @@ from backend.pipeline.fetch_all import run_all
 router = APIRouter()
 
 
+class AnalyzeRequest(BaseModel):
+    """JSON body for POST /analyze. Accepts both `radius_km` (preferred) and
+    `radius` (legacy) for backward compatibility."""
+    lat: float = Field(..., description="Center latitude")
+    lon: float = Field(..., description="Center longitude")
+    radius_km: float | None = Field(default=None, description="Search radius in km")
+    radius: float | None    = Field(default=None, description="Alias for radius_km")
+
+    @property
+    def effective_radius(self) -> float:
+        return self.radius_km or self.radius or 10.0
+
+
 @router.post("/analyze")
-def analyze(
-    lat: float = Query(..., description="Center latitude"),
-    lon: float = Query(..., description="Center longitude"),
-    radius: float = Query(10.0, description="Search radius in km"),
-):
+def analyze(body: AnalyzeRequest):
+    lat    = body.lat
+    lon    = body.lon
+    radius = body.effective_radius
+
     db = get_client()
 
-    # ── Check if we already have data for this exact location ──────────────
-    # Uses the UNIQUE(lat, lon, radius_km) constraint on analysis_runs.
-    # .maybe_single() returns None when no row exists, crashing .data access.
-    # Use plain .execute() instead — returns an empty list when nothing found.
+    # ── Cache check using UNIQUE(lat, lon, radius_km) constraint ────────────
     existing = (
         db.table("analysis_runs")
         .select("id, fetched_at")
@@ -39,7 +51,6 @@ def analyze(
     )
 
     if existing.data:
-        # Cache hit — return the existing run_id immediately
         return {
             "run_id"    : existing.data[0]["id"],
             "fetched_at": existing.data[0]["fetched_at"],
@@ -52,7 +63,6 @@ def analyze(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline failed: {e}")
 
-    # ── Persist all 10 tables to Supabase ──────────────────────────────────
     try:
         run_id = persist_run(data)
     except Exception as e:
