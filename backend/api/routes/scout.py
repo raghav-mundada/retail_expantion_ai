@@ -9,9 +9,10 @@ Reuses the standard analysis_run pipeline under the hood, so the returned
 """
 
 import traceback
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.api.deps import optional_user
 from backend.scoring.scout import run_scout
 from backend.scoring.metrics import STORE_FORMATS
 
@@ -27,7 +28,10 @@ class ScoutRequest(BaseModel):
 
 
 @router.post("/scout")
-def scout(body: ScoutRequest):
+def scout(
+    body: ScoutRequest,
+    user_id: str | None = Depends(optional_user),
+):
     if body.store_format not in STORE_FORMATS:
         raise HTTPException(
             status_code=400,
@@ -41,6 +45,7 @@ def scout(body: ScoutRequest):
             radius_km    = body.radius_km,
             store_format = body.store_format,
             n_candidates = body.n_candidates,
+            user_id      = user_id,
         )
     except Exception as e:
         traceback.print_exc()

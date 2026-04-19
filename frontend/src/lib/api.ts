@@ -2,7 +2,27 @@
 // Backend API client — talks to FastAPI on :8000
 // ────────────────────────────────────────────────────────────
 
-const BASE = "http://localhost:8000";
+import { supabase } from "./supabase";
+
+const BASE = (import.meta.env.VITE_API_BASE as string) || "http://localhost:8000";
+
+/**
+ * Build headers with the current Supabase JWT attached when the user is
+ * logged in. Anonymous calls still work — backend treats missing/expired
+ * tokens as "anonymous request, don't attribute to anyone".
+ */
+async function authHeaders(extra?: HeadersInit): Promise<HeadersInit> {
+  const headers: Record<string, string> = { ...(extra as Record<string, string> ?? {}) };
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+      headers["Authorization"] = `Bearer ${data.session.access_token}`;
+    }
+  } catch {
+    // ignore — proceed anonymously
+  }
+  return headers;
+}
 
 export interface AnalyzeResponse {
   run_id: string;
@@ -67,13 +87,23 @@ export interface DebateResponse {
     key_risks: string[];
     key_strengths: string[];
   };
+  /** True when served from agent_sessions cache, false when freshly run. */
+  cached?: boolean;
+  /** ISO timestamp the original debate was created (only present on cached). */
+  created_at?: string | null;
 }
 
-export async function analyze(lat: number, lon: number, radius_km: number): Promise<AnalyzeResponse> {
+export async function analyze(
+  lat: number,
+  lon: number,
+  radius_km: number,
+  store_format?: string,
+): Promise<AnalyzeResponse> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${BASE}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lat, lon, radius_km }),
+    headers,
+    body: JSON.stringify({ lat, lon, radius_km, store_format }),
   });
   if (!res.ok) throw new Error(`Analyze failed: ${res.status}`);
   return res.json();
@@ -176,9 +206,10 @@ export async function scout(
   store_format: string,
   n_candidates = 3,
 ): Promise<ScoutResponse> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${BASE}/scout`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ lat, lon, radius_km, store_format, n_candidates }),
   });
   if (!res.ok) {
@@ -209,9 +240,10 @@ export async function getStoreFormats(): Promise<StoreFormatInfo[]> {
 }
 
 export async function startDebate(run_id: string, store_format = "Target"): Promise<DebateResponse> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
   const res = await fetch(`${BASE}/runs/${run_id}/debate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ store_format }),
   });
   if (!res.ok) {
@@ -223,4 +255,52 @@ export async function startDebate(run_id: string, store_format = "Target"): Prom
     throw new Error(detail);
   }
   return res.json();
+}
+
+/**
+ * Try to fetch the most recent CACHED debate for this run + store format.
+ * Returns null on 404 (no debate has ever been run for this combo) so the
+ * caller can fall back to startDebate(). Never triggers the LLM agents.
+ */
+export async function getLatestDebate(
+  run_id: string,
+  store_format = "Target",
+): Promise<DebateResponse | null> {
+  const headers = await authHeaders();
+  const url = `${BASE}/runs/${run_id}/debate/latest?store_format=${encodeURIComponent(store_format)}`;
+  const res = await fetch(url, { headers });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Latest debate failed: ${res.status}`);
+  return res.json();
+}
+
+// ────────────────────────────────────────────────────────────
+// /me/* — user-scoped endpoints (require auth)
+// ────────────────────────────────────────────────────────────
+
+export interface MyRun {
+  id: string;
+  lat: number;
+  lon: number;
+  radius_km: number;
+  store_format: string | null;
+  label: string | null;
+  fetched_at: string | null;
+  created_at: string;
+  summary: {
+    tract_count: number | null;
+    total_population: number | null;
+    total_households: number | null;
+    median_hh_income: number | null;
+    competitors_count: number;
+  };
+}
+
+export async function getMyRuns(): Promise<MyRun[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE}/me/runs`, { headers });
+  if (res.status === 401) throw new Error("Not signed in");
+  if (!res.ok) throw new Error(`Failed to load runs: ${res.status}`);
+  const data = await res.json();
+  return data.runs ?? [];
 }

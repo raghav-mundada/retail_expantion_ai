@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, TrendingUp, TrendingDown, Gavel, Loader, Calculator, BookOpen } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Gavel, Loader, Calculator, BookOpen, RefreshCw, Database } from "lucide-react";
 
-import { startDebate, type DebateResponse, type ScoreContribution, type FormulaDoc } from "../lib/api";
+import {
+  getLatestDebate,
+  startDebate,
+  type DebateResponse,
+  type ScoreContribution,
+  type FormulaDoc,
+} from "../lib/api";
 import { fmtUSD } from "../lib/format";
 
 interface Props {
@@ -17,31 +23,83 @@ const AGENT_STAGES = [
   { id: "orch",   label: "Orchestrator", caption: "Synthesizing verdict…" },
 ];
 
+const fmtRelative = (iso?: string | null) => {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (s < 60) return `${s}s ago`;
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  return `${d}d ago`;
+};
+
 export function AIRecommendation({ runId, storeFormat, onClose }: Props) {
   const [stage, setStage]     = useState<"loading" | "done">("loading");
   const [agentIx, setAgentIx] = useState(0);
   const [result, setResult]   = useState<DebateResponse | null>(null);
+  const [rerunning, setRerunning] = useState(false);
   const fired = useRef(false);
 
+  // Try cache first → fall back to fresh debate. The `fired` ref is a single
+  // hard guard against StrictMode double-mount in dev (and against re-fires
+  // when parent re-renders with a new `onClose` identity). DO NOT add a
+  // `cancelled` flag here — StrictMode's unmount-then-remount would set it
+  // before the async fall-through could ever reach startDebate, leaving the
+  // UI stuck on the loading screen forever.
   useEffect(() => {
-    if (fired.current) return;   // guard against React StrictMode double-fire
+    if (fired.current) return;
     fired.current = true;
 
-    startDebate(runId, storeFormat)
-      .then((r) => {
-        setResult(r);
-        setStage("done");
-      })
-      .catch((e) => {
-        console.error(e);
+    (async () => {
+      try {
+        const cached = await getLatestDebate(runId, storeFormat);
+        if (cached) {
+          setResult(cached);
+          setStage("done");
+          return;
+        }
+
+        const t1 = setTimeout(() => setAgentIx(1), 4000);
+        const t2 = setTimeout(() => setAgentIx(2), 9000);
+        try {
+          const fresh = await startDebate(runId, storeFormat);
+          setResult(fresh);
+          setStage("done");
+        } finally {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        }
+      } catch (e: any) {
+        console.error("Debate flow failed:", e);
         alert("Debate failed: " + e.message);
         onClose();
-      });
+      }
+    })();
+  }, [runId, storeFormat, onClose]);
 
+  const handleRerun = useCallback(async () => {
+    if (rerunning) return;
+    setRerunning(true);
+    setStage("loading");
+    setAgentIx(0);
     const t1 = setTimeout(() => setAgentIx(1), 4000);
     const t2 = setTimeout(() => setAgentIx(2), 9000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [runId, storeFormat, onClose]);
+    try {
+      const fresh = await startDebate(runId, storeFormat);
+      setResult(fresh);
+      setStage("done");
+    } catch (e: any) {
+      console.error(e);
+      alert("Re-run failed: " + e.message);
+    } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      setRerunning(false);
+    }
+  }, [rerunning, runId, storeFormat]);
 
   return (
     <motion.div
@@ -57,10 +115,33 @@ export function AIRecommendation({ runId, storeFormat, onClose }: Props) {
             <span className="label-xs">CHAPTER FOUR — DECIDE</span>
             <span className="text-mist">·</span>
             <span className="label-xs text-emerald">AGENTIC ANALYSIS</span>
+            {result?.cached && stage === "done" && (
+              <>
+                <span className="text-mist">·</span>
+                <span className="hidden sm:inline-flex items-center gap-1.5 label-xs text-graphite">
+                  <Database className="w-3 h-3" strokeWidth={1.5} />
+                  CACHED · {fmtRelative(result.created_at)}
+                </span>
+              </>
+            )}
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-bone transition">
-            <X className="w-4 h-4" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center gap-1">
+            {stage === "done" && (
+              <button
+                onClick={handleRerun}
+                disabled={rerunning}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-graphite
+                           hover:text-ink hover:bg-bone transition disabled:opacity-50"
+                title="Re-run the agent debate from scratch"
+              >
+                <RefreshCw className={`w-3 h-3 ${rerunning ? "animate-spin" : ""}`} strokeWidth={1.5} />
+                {rerunning ? "Re-running…" : "Re-run analysis"}
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-bone transition">
+              <X className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       </div>
 

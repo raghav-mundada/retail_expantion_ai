@@ -285,6 +285,7 @@ def run_scout(
     radius_km: float,
     store_format: str = "Target",
     n_candidates: int = 3,
+    user_id: str | None = None,
 ) -> dict:
     """
     Find top-N spatially-diverse retail candidates inside a circle.
@@ -296,6 +297,12 @@ def run_scout(
     db = get_client()
     fmt = STORE_FORMATS.get(store_format, STORE_FORMATS["Target"])
     min_acres = fmt["min_parcel_acres"]
+
+    # Round to 6 decimals (~11cm) so float precision drift between requests
+    # can't bypass the cache and create duplicate runs for the same point.
+    lat       = round(float(lat), 6)
+    lon       = round(float(lon), 6)
+    radius_km = round(float(radius_km), 3)
 
     # ── 1. Cache check or fetch ──────────────────────────────────────────
     existing = (
@@ -310,6 +317,12 @@ def run_scout(
 
     if existing.data:
         candidate_run_id = existing.data[0]["id"]
+        # Claim ownership for the logged-in user if it was an anonymous run
+        if user_id:
+            db.table("analysis_runs").update({
+                "user_id"     : user_id,
+                "store_format": store_format,
+            }).eq("id", candidate_run_id).is_("user_id", "null").execute()
         # Make sure the cached tracts have centroid coords — older runs
         # were persisted before we added these columns and would silently
         # produce zero scores. If they're missing, blow it away and refetch.
@@ -331,7 +344,7 @@ def run_scout(
 
     if run_id is None:
         data   = run_all(lat=lat, lon=lon, radius_km=radius_km)
-        run_id = persist_run(data)
+        run_id = persist_run(data, user_id=user_id, store_format=store_format)
 
     # ── 2. Pull what we need from Supabase ───────────────────────────────
     parcels = (
