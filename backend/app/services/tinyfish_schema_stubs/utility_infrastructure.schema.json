@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/utility_infrastructure",
+  "title": "Utility & Infrastructure Data",
+  "description": "Layer 2 stub — normalized utility infrastructure signals. Wire in utility APIs or OSM-enhanced data here.",
+  "type": "object",
+  "required": ["lat", "lng"],
+  "properties": {
+    "lat": { "type": "number" },
+    "lng": { "type": "number" },
+    "power_provider": { "type": "string", "description": "Utility company name" },
+    "substation_distance_miles": { "type": "number" },
+    "power_reliability_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "water_provider": { "type": "string" },
+    "water_main_distance_feet": { "type": "number" },
+    "sewer_connection_available": { "type": "boolean" },
+    "natural_gas_available": { "type": "boolean" },
+    "broadband_max_download_mbps": { "type": "number" },
+    "broadband_providers_count": { "type": "integer" },
+    "fiber_available": { "type": "boolean" },
+    "fcc_coverage_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "% of census block with ≥100Mbps broadband per FCC data"
+    },
+    "overall_utility_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    }
+  },
+  "_tinyfish_note": "TinyFish can extract from FCC Broadband Map API (free public API), APS/SRP utility portals, and city utility maps."
+}

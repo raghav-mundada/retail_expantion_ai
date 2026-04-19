@@ -5,11 +5,11 @@ import { motion } from "framer-motion";
 import { ArrowRight, MapPin, Navigation } from "lucide-react";
 import { fmtCoord } from "../lib/format";
 
-// Minneapolis hard bounds
-const MPLS_CENTER: [number, number] = [44.9778, -93.2650];
-const MPLS_BOUNDS: L.LatLngBoundsLiteral = [
-  [44.85, -93.40],  // SW
-  [45.10, -93.10],  // NE
+// Phoenix Metro — wide bounds to cover all candidate sites
+const PHOENIX_CENTER: [number, number] = [33.4484, -112.0740];
+const PHOENIX_BOUNDS: L.LatLngBoundsLiteral = [
+  [33.0, -112.8],  // SW — covers Goodyear, Laveen
+  [33.9, -111.5],  // NE — covers Queen Creek, Scottsdale North
 ];
 
 // Custom emerald pin
@@ -39,7 +39,12 @@ export interface PickedLocation {
   radius_km: number;
 }
 
-export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => void }) {
+interface Props {
+  onAnalyze: (loc: PickedLocation) => void;
+  retailerName?: string;
+}
+
+export function MapPicker({ onAnalyze, retailerName }: Props) {
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
   const [radius, setRadius] = useState(5);
 
@@ -50,12 +55,12 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
     <div className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
       {/* Map */}
       <MapContainer
-        center={MPLS_CENTER}
-        zoom={12}
-        minZoom={11}
+        center={PHOENIX_CENTER}
+        zoom={10}
+        minZoom={9}
         maxZoom={16}
-        maxBounds={MPLS_BOUNDS}
-        maxBoundsViscosity={1}
+        maxBounds={PHOENIX_BOUNDS}
+        maxBoundsViscosity={0.9}
         zoomControl={true}
         scrollWheelZoom={true}
         className="h-full w-full"
@@ -85,13 +90,14 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
         className="absolute top-8 left-8 max-w-md z-[1000] pointer-events-none"
       >
         <div className="bg-snow border border-hairline p-7 pointer-events-auto shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)]">
-          <div className="label-xs mb-4">CHAPTER ONE — LOCATE</div>
+          <div className="label-xs mb-4">CHAPTER TWO — LOCATE</div>
           <h1 className="display-md mb-3">
-            Drop a pin <em className="italic font-display">anywhere</em> in Minneapolis.
+            Drop a pin{retailerName ? <> for <em className="italic font-display">{retailerName}</em></> : ""}<br />
+            anywhere in Phoenix Metro.
           </h1>
           <p className="text-sm text-graphite leading-relaxed">
-            We'll pull every household, competitor, parcel, school, and traffic
-            count within your radius — and tell you whether it's worth the lease.
+            We'll run 8 parallel agents — demographics, competitors, hotspot signals,
+            amenity intel, and brand fit — then score this location in seconds.
           </p>
         </div>
       </motion.div>
@@ -148,7 +154,7 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
             <input
               type="range"
               min={1}
-              max={10}
+              max={16}
               step={0.5}
               value={radius}
               onChange={(e) => setRadius(parseFloat(e.target.value))}
@@ -156,8 +162,8 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
             />
             <div className="flex justify-between mt-2 label-xs">
               <span>1 KM</span>
-              <span>5 KM</span>
-              <span>10 KM</span>
+              <span>8 KM</span>
+              <span>16 KM</span>
             </div>
           </div>
 
@@ -169,7 +175,9 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
                        transition-all duration-300 hover:bg-graphite disabled:bg-bone disabled:text-mist
                        disabled:cursor-not-allowed group"
           >
-            <span className="text-sm font-medium tracking-snug">Analyze Location</span>
+            <span className="text-sm font-medium tracking-snug">
+              {retailerName ? `Run ${retailerName} Analysis` : "Analyze Location"}
+            </span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
           </button>
         </div>
@@ -179,7 +187,7 @@ export function MapPicker({ onAnalyze }: { onAnalyze: (loc: PickedLocation) => v
       <div className="absolute bottom-8 left-8 z-[1000] bg-paper/80 backdrop-blur-sm px-3 py-2">
         <div className="flex items-center gap-3 text-graphite">
           <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span className="label-xs">CITY OF MINNEAPOLIS · 87 NEIGHBORHOODS · 232 CENSUS TRACTS</span>
+          <span className="label-xs">PHOENIX METRO · 10 CANDIDATE SITES · 8-AGENT AI PIPELINE</span>
         </div>
       </div>
     </div>

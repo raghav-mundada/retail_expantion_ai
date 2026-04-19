@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/geographic_context",
+  "title": "Geographic Context",
+  "description": "Layer 2 stub — normalized geographic/neighborhood context. Wire in your Minneapolis neighborhood context API here.",
+  "type": "object",
+  "required": ["lat", "lng", "neighborhood_name", "city", "state", "zip"],
+  "properties": {
+    "lat": { "type": "number" },
+    "lng": { "type": "number" },
+    "neighborhood_name": { "type": "string" },
+    "city": { "type": "string" },
+    "state": { "type": "string", "maxLength": 2 },
+    "zip": { "type": "string" },
+    "census_tract": { "type": "string" },
+    "walk_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "transit_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "bike_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "urban_classification": {
+      "type": "string",
+      "enum": ["urban_core", "dense_suburban", "suburban", "exurban", "rural"]
+    },
+    "land_use_mix": {
+      "type": "object",
+      "properties": {
+        "commercial_pct": { "type": "number" },
+        "residential_pct": { "type": "number" },
+        "industrial_pct": { "type": "number" },
+        "open_space_pct": { "type": "number" }
+      }
+    }
+  },
+  "_tinyfish_note": "TinyFish can extract this from walkscore.com, city GIS portals, or neighborhood data APIs using the Agent API."
+}

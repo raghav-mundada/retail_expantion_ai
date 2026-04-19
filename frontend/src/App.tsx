@@ -2,43 +2,61 @@ import { useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { PhaseHeader } from "./components/PhaseHeader";
+import { BrandSelector } from "./components/BrandSelector";
 import { MapPicker, type PickedLocation } from "./components/MapPicker";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { Dashboard } from "./components/Dashboard";
 import { AIRecommendation } from "./components/AIRecommendation";
 
-import { analyze, type AnalyzeResponse } from "./lib/api";
+import { analyzeV2, type RetailerProfile, type AnalysisResultV2 } from "./lib/api";
 
-type Phase = "pick" | "loading" | "dashboard";
+type Phase = "brand" | "pick" | "loading" | "dashboard";
 
 export default function App() {
-  const [phase, setPhase] = useState<Phase>("pick");
-  const [location, setLocation] = useState<PickedLocation | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [phase, setPhase]           = useState<Phase>("brand");
+  const [retailer, setRetailer]     = useState<RetailerProfile | null>(null);
+  const [retailerName, setRetailerName] = useState<string>("");
+  const [location, setLocation]     = useState<PickedLocation | null>(null);
+  const [result, setResult]         = useState<AnalysisResultV2 | null>(null);
   const [showOracle, setShowOracle] = useState(false);
 
-  // We hold onto the in-flight fetch promise so the LoadingScreen can await it
-  const fetchPromiseRef = useRef<Promise<AnalyzeResponse> | null>(null);
+  const fetchPromiseRef = useRef<Promise<AnalysisResultV2> | null>(null);
 
   const phaseNumber =
-    phase === "pick"      ? 1 :
-    phase === "loading"   ? 2 :
-    showOracle            ? 4 :
-                            3;
+    phase === "brand"   ? 1 :
+    phase === "pick"    ? 2 :
+    phase === "loading" ? 3 :
+    showOracle          ? 5 :
+                          4;
+
+  function handleBrandSelect(r: RetailerProfile, name: string) {
+    setRetailer(r);
+    setRetailerName(name);
+    setPhase("pick");
+  }
 
   function handlePick(loc: PickedLocation) {
+    if (!retailer) return;
     setLocation(loc);
-    fetchPromiseRef.current = analyze(loc.lat, loc.lon, loc.radius_km).then((res) => {
-      setRunId(res.run_id);
+    fetchPromiseRef.current = analyzeV2({
+      lat: loc.lat,
+      lng: loc.lon,
+      retailer,
+      radius_miles: Math.round(loc.radius_km * 0.621371 * 10) / 10,
+      region_city: "Phoenix, AZ",
+    }).then((res) => {
+      setResult(res);
       return res;
     });
     setPhase("loading");
   }
 
   function handleReset() {
-    setPhase("pick");
+    setPhase("brand");
+    setRetailer(null);
+    setRetailerName("");
     setLocation(null);
-    setRunId(null);
+    setResult(null);
     setShowOracle(false);
     fetchPromiseRef.current = null;
   }
@@ -48,6 +66,18 @@ export default function App() {
       <PhaseHeader current={phaseNumber} onReset={handleReset} />
 
       <AnimatePresence mode="wait">
+        {phase === "brand" && (
+          <motion.div
+            key="brand"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <BrandSelector onSelect={handleBrandSelect} />
+          </motion.div>
+        )}
+
         {phase === "pick" && (
           <motion.div
             key="pick"
@@ -56,7 +86,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <MapPicker onAnalyze={handlePick} />
+            <MapPicker onAnalyze={handlePick} retailerName={retailerName} />
           </motion.div>
         )}
 
@@ -72,13 +102,13 @@ export default function App() {
               lat={location.lat}
               lon={location.lon}
               radius_km={location.radius_km}
-              fetchPromise={fetchPromiseRef.current}
+              fetchPromise={fetchPromiseRef.current as any}
               onComplete={() => setPhase("dashboard")}
             />
           </motion.div>
         )}
 
-        {phase === "dashboard" && location && runId && (
+        {phase === "dashboard" && location && result && (
           <motion.div
             key="dashboard"
             initial={{ opacity: 0, y: 12 }}
@@ -87,7 +117,7 @@ export default function App() {
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           >
             <Dashboard
-              runId={runId}
+              result={result}
               lat={location.lat}
               lon={location.lon}
               radius_km={location.radius_km}
@@ -98,10 +128,10 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showOracle && runId && (
+        {showOracle && result && (
           <AIRecommendation
-            runId={runId}
-            storeFormat="Target"
+            runId={`${result.lat.toFixed(4)}_${result.lng.toFixed(4)}`}
+            storeFormat={result.brand}
             onClose={() => setShowOracle(false)}
           />
         )}

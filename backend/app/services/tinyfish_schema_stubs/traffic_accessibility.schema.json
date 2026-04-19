@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/traffic_accessibility",
+  "title": "Traffic & Accessibility Data",
+  "description": "Layer 2 stub — normalized traffic and road accessibility signals. Wire in your traffic/accessibility API here.",
+  "type": "object",
+  "required": ["lat", "lng"],
+  "properties": {
+    "lat": { "type": "number" },
+    "lng": { "type": "number" },
+    "daily_vehicle_count": {
+      "type": "integer",
+      "description": "Average daily vehicle traffic on nearest arterial road"
+    },
+    "highway_proximity_miles": { "type": "number" },
+    "nearest_freeway_interchange": { "type": "string" },
+    "intersection_type": {
+      "type": "string",
+      "enum": ["signalized", "unsignalized", "roundabout", "highway_ramp"]
+    },
+    "peak_hour_delay_minutes": { "type": "number" },
+    "parking_spaces_available": { "type": "integer" },
+    "bus_stops_within_half_mile": { "type": "integer" },
+    "light_rail_station_miles": { "type": "number" },
+    "bike_lane_adjacent": { "type": "boolean" },
+    "accessibility_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Composite 0-100 score from above signals"
+    }
+  },
+  "_tinyfish_note": "TinyFish can extract AADT from state DOT portals, Google Maps embed data, or traffic analytics APIs."
+}
