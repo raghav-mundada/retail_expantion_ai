@@ -48,7 +48,8 @@ function buildRevenueForecast(annualRevenue: number) {
 
 export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimulation }: Props) {
   const { demographics, competitors, neighborhood, hotspot, amenity, simulation, brand_fit, score } = result;
-  const forecastData = buildRevenueForecast(simulation.predicted_annual_revenue_usd);
+  const hasSimulation = !!simulation;
+  const forecastData = simulation ? buildRevenueForecast(simulation.predicted_annual_revenue_usd) : [];
 
   const scoreDimensions = [
     { label: "Demand",        score: score.demand_score,        weight: "20%" },
@@ -156,8 +157,10 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
           <Kpi
             icon={<TrendingUp className="w-3.5 h-3.5" strokeWidth={1.5} />}
             label="YEAR-1 REVENUE EST."
-            value={fmtUSD(simulation.predicted_annual_revenue_usd)}
-            sub={`${fmtUSD(simulation.confidence_interval_low)}–${fmtUSD(simulation.confidence_interval_high)} CI`}
+            value={simulation ? fmtUSD(simulation.predicted_annual_revenue_usd) : "—"}
+            sub={simulation
+              ? `${fmtUSD(simulation.confidence_interval_low)}–${fmtUSD(simulation.confidence_interval_high)} CI`
+              : "Run AI Simulation to forecast"}
             border
             accent
             onSimulate={onRunSimulation}
@@ -165,8 +168,10 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
           <Kpi
             icon={<MapPin className="w-3.5 h-3.5" strokeWidth={1.5} />}
             label="MONTHLY VISITS"
-            value={fmtNum(simulation.predicted_monthly_visits, true)}
-            sub={`${(simulation.pct_will_visit * 100).toFixed(1)}% of trade area`}
+            value={simulation ? fmtNum(simulation.predicted_monthly_visits, true) : "—"}
+            sub={simulation
+              ? `${(simulation.pct_will_visit * 100).toFixed(1)}% of trade area`
+              : "Awaiting simulation"}
             border
           />
         </motion.div>
@@ -193,13 +198,13 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
               <div className="bg-paper p-3">
                 <div className="label-xs mb-1">MARKET SHARE 6MO</div>
                 <div className="font-display text-2xl tabular" style={{ color: scoreColor(70) }}>
-                  {(simulation.market_share_6mo * 100).toFixed(1)}%
+                  {simulation ? `${(simulation.market_share_6mo * 100).toFixed(1)}%` : "—"}
                 </div>
               </div>
               <div className="bg-paper p-3">
                 <div className="label-xs mb-1">MARKET SHARE 24MO</div>
                 <div className="font-display text-2xl tabular" style={{ color: scoreColor(80) }}>
-                  {(simulation.market_share_24mo * 100).toFixed(1)}%
+                  {simulation ? `${(simulation.market_share_24mo * 100).toFixed(1)}%` : "—"}
                 </div>
               </div>
             </div>
@@ -312,8 +317,23 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
             <SectionHead
               eyebrow="REVENUE SIMULATION"
               title="24-month ramp forecast"
-              caption={`${fmtNum(simulation.simulated_households, true)} simulated households · ${(simulation.pct_will_visit * 100).toFixed(1)}% visit propensity`}
+              caption={simulation
+                ? `${fmtNum(simulation.simulated_households, true)} simulated households · ${(simulation.pct_will_visit * 100).toFixed(1)}% visit propensity`
+                : "Click Run AI Simulation above to generate the 24-month revenue ramp"}
             />
+            {!hasSimulation ? (
+              <div className="h-64 flex flex-col items-center justify-center gap-4 bg-paper border border-dashed border-hairline">
+                <Cpu className="w-6 h-6 text-mocha" strokeWidth={1.5} />
+                <div className="text-sm text-graphite text-center max-w-md">
+                  Agent-based simulation hasn't run yet. The dashboard loads without it
+                  so you're not waiting on 500 household Monte Carlo agents every time.
+                </div>
+                <button onClick={onRunSimulation} className="btn-primary px-6 py-3 text-sm flex items-center gap-2">
+                  <Play className="w-3.5 h-3.5" strokeWidth={2} />
+                  Run AI Simulation
+                </button>
+              </div>
+            ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={forecastData} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
@@ -347,6 +367,7 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            )}
           </div>
 
           <div className="col-span-12 lg:col-span-4 card p-6">
@@ -355,6 +376,7 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
               title="Key metrics"
               caption="Household agent model · word-of-mouth spread"
             />
+            {hasSimulation && simulation ? (
             <div>
               {[
                 { label: "Annual Revenue",     value: fmtUSD(simulation.predicted_annual_revenue_usd), highlight: true },
@@ -377,6 +399,16 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
                 </div>
               ))}
             </div>
+            ) : (
+              <div className="py-10 text-center">
+                <Cpu className="w-5 h-5 text-mocha mx-auto mb-3" strokeWidth={1.5} />
+                <div className="text-sm text-graphite mb-4">No simulation data yet.</div>
+                <button onClick={onRunSimulation} className="btn-primary px-5 py-2 text-sm flex items-center gap-2 mx-auto">
+                  <Play className="w-3.5 h-3.5" strokeWidth={2} />
+                  Run AI Simulation
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -636,15 +668,15 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
           </div>
         </div>
 
-        {/* ══ ROW 6 — Competitors + Spatial Map ══ */}
+        {/* ══ ROW 6 — Competitive Landscape summary (full-width) ══ */}
         <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12 lg:col-span-4 card p-6">
+          <div className="col-span-12 card p-6">
             <SectionHead
               eyebrow="COMPETITIVE LANDSCAPE"
               title="Competitor summary"
               caption={`${competitors.total_count} stores · ${competitors.big_box_count} big-box`}
             />
-            <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
               {[
                 { label: "TOTAL",          value: competitors.total_count,         warn: competitors.total_count > 8 },
                 { label: "BIG-BOX",        value: competitors.big_box_count,       warn: competitors.big_box_count > 3 },
@@ -684,9 +716,9 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
             {competitors.stores.length > 0 && (
               <div className="hairline-t pt-4">
                 <div className="label-xs mb-2">NEAREST COMPETITORS</div>
-                <div className="divide-y divide-hairline">
-                  {competitors.stores.slice(0, 6).map((s: any, i: number) => (
-                    <div key={i} className="py-2 flex items-baseline gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+                  {competitors.stores.slice(0, 9).map((s: any, i: number) => (
+                    <div key={i} className="py-2 flex items-baseline gap-2 hairline-b">
                       <span className="font-mono text-[10px] text-mist w-4">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-ink truncate">{s.brand_name}</div>
@@ -702,16 +734,32 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimul
             )}
           </div>
 
-          <div className="col-span-12 lg:col-span-8 card overflow-hidden">
+        </div>
+
+        {/* Row 6b — full-width spatial overview (competitors + schools + dev sites) */}
+        <div className="grid grid-cols-12 gap-3 mt-3">
+          <div className="col-span-12 card overflow-hidden">
             <div className="p-5 hairline-b">
               <SectionHead
                 eyebrow="SPATIAL OVERVIEW"
-                title="Competitor map"
-                caption={`${competitors.total_count} competitors plotted within ${radius_km} km`}
+                title="Competitor · schools · housing"
+                caption={
+                  `${competitors.total_count} competitors · ` +
+                  `${neighborhood.schools?.length ?? 0} schools · ` +
+                  `${neighborhood.growth_corridors?.length ?? 0} dev sites · ` +
+                  `${radius_km} km radius`
+                }
                 noMargin
               />
             </div>
-            <SpatialMap lat={lat} lon={lon} radius_km={radius_km} competitors={competitors.stores} />
+            <SpatialMap
+              lat={lat}
+              lon={lon}
+              radius_km={radius_km}
+              competitors={competitors.stores}
+              schools={neighborhood.schools || []}
+              growth_corridors={neighborhood.growth_corridors || []}
+            />
           </div>
         </div>
 
@@ -763,7 +811,7 @@ function Kpi({ icon, label, value, sub, border, accent, onSimulate }: any) {
   );
 }
 
-function SpatialMap({ lat, lon, radius_km, competitors }: any) {
+function SpatialMap({ lat, lon, radius_km, competitors, schools, growth_corridors }: any) {
   const pinIcon = L.divIcon({
     className: "",
     html: `<div style="width:18px;height:18px;background:#2D6A4F;border:3px solid #FBF7F2;border-radius:9999px;box-shadow:0 0 0 1.5px #2D6A4F,0 8px 18px rgba(0,0,0,0.22)"></div>`,
@@ -771,8 +819,11 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
     iconAnchor: [9, 9],
   });
 
+  const schoolsArr = Array.isArray(schools) ? schools : [];
+  const growthArr  = Array.isArray(growth_corridors) ? growth_corridors : [];
+
   return (
-    <div className="relative h-[380px] w-full">
+    <div className="relative h-[560px] w-full">
       <div className="absolute top-4 right-4 z-[500] bg-snow border border-hairline px-4 py-3 shadow-md">
         <div className="label-xs mb-2">LEGEND</div>
         <div className="space-y-1.5">
@@ -783,6 +834,14 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
           <div className="flex items-center gap-2 text-xs text-graphite">
             <div className="w-2 h-2 rounded-full bg-ink flex-shrink-0" />
             Competitors ({competitors?.length || 0})
+          </div>
+          <div className="flex items-center gap-2 text-xs text-graphite">
+            <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: "#C8A882" }} />
+            Schools ({schoolsArr.length})
+          </div>
+          <div className="flex items-center gap-2 text-xs text-graphite">
+            <div className="w-2 h-2 flex-shrink-0" style={{ background: "#B85C3A", transform: "rotate(45deg)" }} />
+            New housing / dev ({growthArr.length})
           </div>
         </div>
       </div>
@@ -800,7 +859,9 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
             <div className="font-display text-base">{fmtCoord(lat)}, {fmtCoord(lon)}</div>
           </LeafletTooltip>
         </Marker>
-        {competitors?.slice(0, 200).map((c: any, i: number) => (
+
+        {/* Competitors */}
+        {competitors?.slice(0, 250).map((c: any, i: number) => (
           <CircleMarker
             key={`c-${i}`}
             center={[c.lat, c.lng]}
@@ -818,6 +879,52 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
             </LeafletTooltip>
           </CircleMarker>
         ))}
+
+        {/* Schools */}
+        {schoolsArr.slice(0, 250).map((s: any, i: number) => {
+          const isCollege = s.type === "college" || s.type === "university";
+          const color = isCollege ? "#8A6F3F" : "#C8A882";
+          return (
+            <CircleMarker
+              key={`s-${i}`}
+              center={[s.lat, s.lng]}
+              radius={4}
+              pathOptions={{ color, weight: 1, fillColor: color, fillOpacity: 0.7 }}
+              eventHandlers={{
+                mouseover: (e) => e.target.setStyle({ radius: 7, fillOpacity: 1 }),
+                mouseout:  (e) => e.target.setStyle({ radius: 4, fillOpacity: 0.7 }),
+              }}
+            >
+              <LeafletTooltip direction="top" offset={[0, -6]} className="atlas-tooltip">
+                <div className="label-xs mb-1">{isCollege ? "COLLEGE" : "SCHOOL"}</div>
+                <div className="font-display text-base leading-tight">{s.name}</div>
+                {s.level && <div className="text-xs text-graphite">{s.level}</div>}
+              </LeafletTooltip>
+            </CircleMarker>
+          );
+        })}
+
+        {/* Growth corridors / housing */}
+        {growthArr.slice(0, 200).map((g: any, i: number) => {
+          const color = g.kind === "commercial" ? "#6B4423" : "#B85C3A";
+          return (
+            <CircleMarker
+              key={`g-${i}`}
+              center={[g.lat, g.lng]}
+              radius={4}
+              pathOptions={{ color, weight: 1, fillColor: color, fillOpacity: 0.55 }}
+              eventHandlers={{
+                mouseover: (e) => e.target.setStyle({ radius: 7, fillOpacity: 0.85 }),
+                mouseout:  (e) => e.target.setStyle({ radius: 4, fillOpacity: 0.55 }),
+              }}
+            >
+              <LeafletTooltip direction="top" offset={[0, -6]} className="atlas-tooltip">
+                <div className="label-xs mb-1">{g.kind === "commercial" ? "COMMERCIAL DEV" : "HOUSING / DEV"}</div>
+                <div className="font-display text-base leading-tight">{g.name || "Construction site"}</div>
+              </LeafletTooltip>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
     </div>
   );

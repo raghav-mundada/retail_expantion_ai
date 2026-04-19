@@ -164,7 +164,6 @@ async def run_brand_fit_agent(
         "status": "running",
         "message": f"Evaluating {display} brand positioning strategy for this market...",
     }
-    await asyncio.sleep(0.2)
 
     # Build a minimal BrandDNA from brand name if not provided (backward compat)
     if brand_dna is None:
@@ -197,7 +196,6 @@ async def run_brand_fit_agent(
         "status": "running",
         "message": f"Analyzing income alignment, demographic profile, competitor context. {report}",
     }
-    await asyncio.sleep(0.3)
 
     budget = float(get_settings().analysis_brand_narrative_timeout_seconds)
     budget = max(4.0, min(budget, 60.0))

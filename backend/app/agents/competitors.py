@@ -10,13 +10,7 @@ from app.models.schemas import CompetitorProfile
 async def run_competitor_agent(lat: float, lng: float, radius_miles: float = 10.0, brand: str = "walmart"):
     """Async generator yielding trace events + CompetitorProfile."""
     yield {"agent": "competitor", "status": "running",
-           "message": "Querying OpenStreetMap Overpass API for nearby retail competitors..."}
-    await asyncio.sleep(0.4)
-
-    yield {"agent": "competitor", "status": "running",
-           "message": f"Scanning {radius_miles:.0f}-mile radius for Walmart, Target, Costco, Kroger/Fry's, "
-                       "Aldi, Sam's Club, Safeway, Sprouts, Trader Joe's..."}
-    await asyncio.sleep(0.8)
+           "message": f"Querying OSM Overpass for retail competitors within {radius_miles:.0f} miles..."}
 
     try:
         profile = await asyncio.get_event_loop().run_in_executor(
@@ -27,22 +21,15 @@ async def run_competitor_agent(lat: float, lng: float, radius_miles: float = 10.
         return
 
     saturation_label = "LOW" if profile.saturation_score < 40 else ("MODERATE" if profile.saturation_score < 70 else "HIGH")
-    yield {
-        "agent": "competitor",
-        "status": "running",
-        "message": f"Found {profile.total_count} competitor stores ({profile.big_box_count} big-box). "
-                   f"Market saturation: {saturation_label} ({profile.saturation_score:.0f}/100). "
-                   f"Demand signal: {profile.demand_signal_score:.0f}/100.",
-    }
-    await asyncio.sleep(0.3)
-
-    underserved_msg = " ⚡ Area appears UNDERSERVED — no dominant big-box within 5 miles." if profile.underserved else ""
+    underserved_msg = " · UNDERSERVED" if profile.underserved else ""
     yield {
         "agent": "competitor",
         "status": "done",
-        "message": f"Competitor analysis complete → Competition Score: {profile.competition_score:.0f}/100.{underserved_msg}",
+        "message": (f"Competitor analysis done → {profile.total_count} stores "
+                    f"({profile.big_box_count} big-box) · saturation {saturation_label} · "
+                    f"Competition {profile.competition_score:.0f}/100{underserved_msg}"),
         "data": {
             **profile.model_dump(),
-            "stores": [s.model_dump() for s in profile.stores[:10]]
+            "stores": [s.model_dump() for s in profile.stores[:30]],
         },
     }

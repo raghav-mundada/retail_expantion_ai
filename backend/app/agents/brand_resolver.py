@@ -48,6 +48,16 @@ KNOWN_BRANDS: Dict[str, dict] = {
     "dollar general":{"income": (25_000, 60_000), "sqft": 7_500,   "format": "dollar_store",        "position": "budget",    "cat": ["general_merchandise"]},
     "home depot":   {"income": (50_000, 130_000), "sqft": 105_000, "format": "home_improvement",    "position": "mid_range", "cat": ["hardware", "home_goods"]},
     "lowe's":       {"income": (50_000, 130_000), "sqft": 112_000, "format": "home_improvement",    "position": "mid_range", "cat": ["hardware", "home_goods"]},
+    "tj maxx":      {"income": (40_000, 110_000), "sqft": 30_000,  "format": "off_price_apparel",   "position": "budget",    "cat": ["apparel", "home_goods"]},
+    "burlington":   {"income": (35_000,  95_000), "sqft": 45_000,  "format": "off_price_apparel",   "position": "budget",    "cat": ["apparel", "home_goods"]},
+    "five below":   {"income": (30_000,  85_000), "sqft": 10_000,  "format": "dollar_store",        "position": "budget",    "cat": ["general_merchandise"]},
+    "bj's wholesale":{"income": (60_000,150_000), "sqft": 115_000, "format": "warehouse_club",      "position": "mid_range", "cat": ["grocery", "general_merchandise"]},
+    "sam's club":   {"income": (55_000, 140_000), "sqft": 134_000, "format": "warehouse_club",      "position": "mid_range", "cat": ["grocery", "general_merchandise"]},
+    "lidl":         {"income": (30_000,  75_000), "sqft": 22_000,  "format": "limited_assortment",  "position": "budget",    "cat": ["grocery"]},
+    "fresh thyme":  {"income": (55_000, 130_000), "sqft": 28_000,  "format": "natural_grocery",     "position": "mid_range", "cat": ["grocery", "specialty"]},
+    "meijer":       {"income": (40_000, 100_000), "sqft": 200_000, "format": "supercenter",         "position": "mid_range", "cat": ["general_merchandise", "grocery"]},
+    "cub foods":    {"income": (40_000,  95_000), "sqft": 65_000,  "format": "full_grocery",        "position": "mid_range", "cat": ["grocery"]},
+    "hy-vee":       {"income": (45_000, 115_000), "sqft": 90_000,  "format": "full_grocery",        "position": "mid_range", "cat": ["grocery"]},
 }
 
 

@@ -1,29 +1,30 @@
 """
-Orchestrator Agent v2 — 8-Agent Pipeline
+Orchestrator Agent v3 — lean 7-agent pipeline (simulation is now on-demand).
 
-Phase 0: Brand Resolver (always runs first — resolves RetailerProfile → BrandDNA)
-Phase 1: Demographics + Competitors + Schools + Hotspot (parallel interleaved)
-Phase 2: Simulation + BrandFit + Amenity (parallel interleaved)
+Phase 0 (fast-path, parallel with Phase 1): reverse-geocode + brand resolver.
+Phase 1: Demographics + Competitors + Schools + Hotspot (parallel)
+Phase 2: BrandFit + Amenity (parallel)
 Phase 3: Scoring Engine
 
-Yields SSE-compatible trace events throughout.
-Results captured from 'done' event data payloads.
+Simulation (the 26s OpenAI agent) is deliberately excluded — it runs only
+when the user hits "Run AI Simulation" on the dashboard, via /api/simulate.
 """
 import asyncio
+import hashlib
+import time
 from typing import AsyncGenerator, Optional
 
 from geopy.geocoders import Nominatim
 
 from app.models.schemas import (
     AnalysisResult, DemographicsProfile, CompetitorProfile, CompetitorStore,
-    NeighborhoodProfile, SimulationResult, BrandFitProfile,
+    NeighborhoodProfile, BrandFitProfile,
     HotspotProfile, AmenityProfile, BrandDNA, RetailerProfile, RetailSignal,
     StoreSizeEnum,
 )
 from app.agents.demographics import run_demographics_agent
 from app.agents.competitors import run_competitor_agent
 from app.agents.schools import run_schools_agent
-from app.agents.simulation import run_simulation_agent
 from app.agents.brand_fit import run_brand_fit_agent
 from app.agents.brand_resolver import run_brand_resolver_agent
 from app.agents.hotspot import run_hotspot_agent
@@ -47,35 +48,12 @@ def _reverse_geocode(lat: float, lng: float) -> str:
     return f"{lat:.4f}°N, {abs(lng):.4f}°W"
 
 
-async def _interleave_agents(
-    *generators,
-    field_map: dict,  # {agent_name: dict_key} — maps agent name to results key
-) -> tuple[list[dict], dict]:
-    """
-    Run multiple async generators concurrently by round-robin polling.
-    Returns (all_events, results_dict).
-    """
-    iters = [(gen.__aiter__(), name) for gen, name in generators]
-    done_set = set()
-    results = {}
-    all_events = []
-
-    while len(done_set) < len(iters):
-        for gen_iter, name in iters:
-            if name in done_set:
-                continue
-            try:
-                event = await gen_iter.__anext__()
-                all_events.append(event)
-                # Capture result from done event
-                if event.get("status") == "done" and event.get("agent") == name:
-                    key = field_map.get(name)
-                    if key:
-                        results[key] = event.get("data") or {}
-            except StopAsyncIteration:
-                done_set.add(name)
-
-    return all_events, results
+async def _drain_generator(gen, capture_key: str, results: dict, events: list) -> None:
+    """Consume an async generator, forwarding events and capturing the final 'done' payload."""
+    async for event in gen:
+        events.append(event)
+        if event.get("status") == "done" and event.get("data") is not None:
+            results[capture_key] = event["data"]
 
 
 # ── Main Orchestrator ─────────────────────────────────────────────────────────
@@ -85,37 +63,61 @@ async def run_orchestrator(
     lng: float,
     retailer: RetailerProfile,
     radius_miles: float = 10.0,
-    region_city: str = "Phoenix, AZ",
+    region_city: str = "Minneapolis, MN",
 ) -> AsyncGenerator[dict, None]:
     """
-    Full 8-agent analysis pipeline.
-    Yields SSE trace events. Final event (status=complete) contains AnalysisResult.
+    Lean analysis pipeline (no simulation). Yields SSE trace events;
+    final event (status=complete) contains AnalysisResult.
     """
+    t0 = time.perf_counter()
     display_name = retailer.display_name()
 
-    yield {
-        "agent": "orchestrator",
-        "status": "running",
-        "message": f"🚀 RetailIQ analysis initiated — {display_name} @ ({lat:.4f}, {lng:.4f})",
-    }
-    await asyncio.sleep(0.1)
-
-    # Resolve address
-    yield {"agent": "orchestrator", "status": "running", "message": "📍 Resolving site address..."}
-    address_label = await asyncio.get_event_loop().run_in_executor(None, _reverse_geocode, lat, lng)
     yield {"agent": "orchestrator", "status": "running",
-           "message": f"📍 Candidate site: {address_label}"}
+           "message": f"🚀 RetailIQ analysis — {display_name} @ ({lat:.4f}, {lng:.4f})"}
 
-    # ── PHASE 0: Brand Resolver ────────────────────────────────────────────
-    yield {"agent": "orchestrator", "status": "running",
-           "message": "🔍 Phase 0: Resolving retailer brand DNA..."}
+    # ── Warm-cache fast path (Supabase KV, keyed on lat/lng/retailer/radius) ──
+    ck = _cache_key(lat, lng, retailer, radius_miles)
+    try:
+        from app.services.supabase_service import cache_get
+        cached = cache_get(f"analysis:{ck}")
+        if cached and isinstance(cached, dict):
+            try:
+                cached_result = AnalysisResult(**cached)
+                yield {
+                    "agent": "orchestrator", "status": "running",
+                    "message": f"⚡ Cache hit — reusing prior analysis (key {ck})",
+                }
+                yield {
+                    "agent": "orchestrator", "status": "complete",
+                    "message": (
+                        f"✅ Cached result — {cached_result.score.rank_label} "
+                        f"({cached_result.score.total_score:.0f}/100) · "
+                        f"{cached_result.address_label} · {display_name}"
+                    ),
+                    "data": cached_result.model_dump(),
+                    "cached": True,
+                }
+                return
+            except Exception as e:
+                print(f"[Supabase] Warm cache rehydrate failed ({e}) — recomputing")
+    except Exception as e:
+        print(f"[Supabase] cache_get failed ({e}) — continuing")
 
-    brand_dna_data: dict = {}
-    async for event in run_brand_resolver_agent(retailer):
-        yield event
-        if event.get("status") == "done" and event.get("agent") == "brand_resolver":
-            brand_dna_data = event.get("data") or {}
+    # ── PHASE 0 (parallel): geocode + brand resolver ─────────────────────
+    geocode_task = asyncio.get_event_loop().run_in_executor(None, _reverse_geocode, lat, lng)
 
+    brand_events: list = []
+    brand_results: dict = {}
+    resolver_task = asyncio.create_task(
+        _drain_generator(run_brand_resolver_agent(retailer), "brand_resolver", brand_results, brand_events)
+    )
+
+    # Await brand_resolver first (Phase 1 needs display_name / category), flush its events.
+    await resolver_task
+    for ev in brand_events:
+        yield ev
+
+    brand_dna_data = brand_results.get("brand_resolver") or {}
     try:
         brand_dna = BrandDNA(**brand_dna_data)
     except Exception:
@@ -130,7 +132,6 @@ async def run_orchestrator(
             reasoning="Fallback baseline brand profile.",
         )
 
-    # Determine store size for amenity agent
     store_size = StoreSizeEnum.BIG_BOX
     if brand_dna.footprint_sqft < 5_000:
         store_size = StoreSizeEnum.SMALL
@@ -139,158 +140,58 @@ async def run_orchestrator(
     elif brand_dna.footprint_sqft < 80_000:
         store_size = StoreSizeEnum.LARGE
 
-    # Primary category for hotspot search
     primary_cat = brand_dna.primary_categories[0] if brand_dna.primary_categories else "retail"
 
-    # ── PHASE 1: Parallel — Demo + Competitors + Schools + Hotspot ────────
+    # ── PHASE 1 (parallel): Demo + Competitors + Schools + Hotspot ───────
     yield {"agent": "orchestrator", "status": "running",
-           "message": "⚡ Phase 1: Launching Demographics, Competitors, Schools, and Hotspot in parallel..."}
-    await asyncio.sleep(0.1)
+           "message": "⚡ Phase 1: Demographics + Competitors + Schools + Hotspot (parallel)"}
 
-    # Run the four Phase 1 agents, interleaving events manually
-    demo_iter = run_demographics_agent(lat, lng, radius_miles).__aiter__()
-    comp_iter = run_competitor_agent(lat, lng, radius_miles, brand_dna.display_name).__aiter__()
-    school_iter = run_schools_agent(lat, lng).__aiter__()
-    hotspot_iter = run_hotspot_agent(lat, lng, region_city, primary_cat).__aiter__()
+    p1_events: list = []
+    p1_results: dict = {}
+    p1_tasks = [
+        asyncio.create_task(_drain_generator(
+            run_demographics_agent(lat, lng, radius_miles), "demographics", p1_results, p1_events)),
+        asyncio.create_task(_drain_generator(
+            run_competitor_agent(lat, lng, radius_miles, brand_dna.display_name), "competitor", p1_results, p1_events)),
+        asyncio.create_task(_drain_generator(
+            run_schools_agent(lat, lng), "schools", p1_results, p1_events)),
+        asyncio.create_task(_drain_generator(
+            run_hotspot_agent(lat, lng, region_city, primary_cat), "hotspot", p1_results, p1_events)),
+    ]
+    await asyncio.gather(*p1_tasks, return_exceptions=True)
+    for ev in p1_events:
+        yield ev
 
-    demo_result_data: dict = {}
-    comp_result_data: dict = {}
-    neighborhood_data: dict = {}
-    hotspot_data: dict = {}
+    demographics = _rebuild_demographics(p1_results.get("demographics") or {}, lat, lng, radius_miles)
+    competitors = _rebuild_competitors(p1_results.get("competitor") or {}, lat, lng, radius_miles, brand_dna.display_name)
+    neighborhood = _rebuild_neighborhood(p1_results.get("schools") or {})
+    hotspot = _rebuild_hotspot(p1_results.get("hotspot") or {})
 
-    agents_done = {"demographics": False, "competitor": False, "schools": False, "hotspot": False}
-    iters = {
-        "demographics": demo_iter,
-        "competitor": comp_iter,
-        "schools": school_iter,
-        "hotspot": hotspot_iter,
-    }
-
-    while not all(agents_done.values()):
-        for name, it in iters.items():
-            if agents_done[name]:
-                continue
-            try:
-                event = await it.__anext__()
-                yield event
-                if event.get("status") == "done" and event.get("agent") == name:
-                    data = event.get("data") or {}
-                    if name == "demographics":
-                        demo_result_data = data
-                    elif name == "competitor":
-                        comp_result_data = data
-                    elif name == "schools":
-                        neighborhood_data = data
-                    elif name == "hotspot":
-                        hotspot_data = data
-            except StopAsyncIteration:
-                agents_done[name] = True
-
-    # Reconstruct Phase 1 models — ALWAYS produce non-None objects
-    demographics = None
+    # Geocode should have finished by now — grab the resolved address.
     try:
-        if demo_result_data:
-            demographics = DemographicsProfile(**demo_result_data)
-    except Exception as e:
-        print(f"[Orchestrator] DemographicsProfile rebuild failed: {e}")
-
-    if demographics is None:
-        try:
-            from app.services.census_service import get_demographics_for_location
-            demographics = get_demographics_for_location(lat, lng, radius_miles)
-        except Exception as e2:
-            print(f"[Orchestrator] Census fallback failed: {e2}")
-            from app.services.census_service import _synthetic_demographics
-            demographics = _synthetic_demographics(lat, lng, radius_miles)
-
-    competitors = None
-    try:
-        if comp_result_data:
-            stores = [CompetitorStore(**s) for s in comp_result_data.get("stores", [])]
-            competitors = CompetitorProfile(**{**comp_result_data, "stores": stores})
-    except Exception as e:
-        print(f"[Orchestrator] CompetitorProfile rebuild failed: {e}")
-
-    if competitors is None:
-        try:
-            from app.services.osm_service import get_competitor_profile
-            competitors = get_competitor_profile(lat, lng, radius_miles, brand_dna.display_name)
-        except Exception as e2:
-            print(f"[Orchestrator] OSM fallback failed: {e2}")
-            competitors = CompetitorProfile(
-                stores=[], total_count=0, big_box_count=0, same_category_count=0,
-                saturation_score=50.0, demand_signal_score=60.0,
-                competition_score=60.0, underserved=True,
-            )
-
-    try:
-        neighborhood = NeighborhoodProfile(**{k: v for k, v in neighborhood_data.items() if k != "district_name"})
+        address_label = await asyncio.wait_for(geocode_task, timeout=1.0)
     except Exception:
-        neighborhood = NeighborhoodProfile(
-            school_quality_index=65.0, family_density_score=60.0,
-            neighborhood_stability=65.0, housing_growth_signal=70.0, overall_score=65.0
-        )
+        address_label = f"{lat:.4f}°N, {abs(lng):.4f}°W"
 
-    try:
-        hotspot = HotspotProfile(
-            **{k: v for k, v in hotspot_data.items() if k != "signals"},
-            signals=[RetailSignal(**s) for s in hotspot_data.get("signals", [])]
-        )
-    except Exception:
-        hotspot = None
-
+    # ── PHASE 2 (parallel): BrandFit + Amenity ───────────────────────────
     yield {"agent": "orchestrator", "status": "running",
-           "message": "📊 Phase 1 complete. Launching Simulation, Brand Fit, and Amenity analysis..."}
+           "message": "🎯 Phase 2: Brand Fit + Amenity (parallel)"}
 
-    # ── PHASE 2: Parallel — Simulation + BrandFit + Amenity ───────────────
-    sim_iter2 = run_simulation_agent(lat, lng, demographics, competitors, brand_dna.display_name).__aiter__()
-    bf_iter2 = run_brand_fit_agent(
-        lat, lng, brand_dna.display_name, demographics, competitors, brand_dna
-    ).__aiter__()
-    amenity_iter2 = run_amenity_agent(lat, lng, store_size, region_city).__aiter__()
-
-    sim_data: dict = {}
-    brand_data: dict = {}
-    amenity_data: dict = {}
-
-    agents2_done = {"simulation": False, "brand_fit": False, "amenity": False}
-    iters2 = {
-        "simulation": sim_iter2,
-        "brand_fit": bf_iter2,
-        "amenity": amenity_iter2,
-    }
-
-    while not all(agents2_done.values()):
-        for name, it in iters2.items():
-            if agents2_done[name]:
-                continue
-            try:
-                event = await it.__anext__()
-                yield event
-                if event.get("status") == "done" and event.get("agent") == name:
-                    data = event.get("data") or {}
-                    if name == "simulation":
-                        sim_data = data
-                    elif name == "brand_fit":
-                        brand_data = data
-                    elif name == "amenity":
-                        amenity_data = data
-            except StopAsyncIteration:
-                agents2_done[name] = True
-
-    # Reconstruct Phase 2 models
-    try:
-        simulation = SimulationResult(**sim_data)
-    except Exception:
-        simulation = SimulationResult(
-            simulated_households=500, pct_will_visit=35.0, predicted_monthly_visits=25000,
-            predicted_annual_revenue_usd=45000000, market_share_6mo=10.0, market_share_24mo=18.0,
-            word_of_mouth_score=55.0, cannibalization_risk=10.0,
-            confidence_interval_low=35000000, confidence_interval_high=58000000,
-        )
+    p2_events: list = []
+    p2_results: dict = {}
+    p2_tasks = [
+        asyncio.create_task(_drain_generator(
+            run_brand_fit_agent(lat, lng, brand_dna.display_name, demographics, competitors, brand_dna),
+            "brand_fit", p2_results, p2_events)),
+        asyncio.create_task(_drain_generator(
+            run_amenity_agent(lat, lng, store_size, region_city), "amenity", p2_results, p2_events)),
+    ]
+    await asyncio.gather(*p2_tasks, return_exceptions=True)
+    for ev in p2_events:
+        yield ev
 
     try:
-        brand_fit = BrandFitProfile(**brand_data)
+        brand_fit = BrandFitProfile(**(p2_results.get("brand_fit") or {}))
     except Exception:
         brand_fit = BrandFitProfile(
             brand=display_name, fit_score=65.0,
@@ -300,23 +201,22 @@ async def run_orchestrator(
         )
 
     try:
-        amenity = AmenityProfile(**amenity_data)
+        amenity = AmenityProfile(**(p2_results.get("amenity") or {}))
     except Exception:
         amenity = None
 
     # ── PHASE 3: Scoring ──────────────────────────────────────────────────
     yield {"agent": "orchestrator", "status": "running",
-           "message": "🧮 Phase 3: Computing 8-dimension composite location score..."}
-    await asyncio.sleep(0.2)
+           "message": "🧮 Phase 3: composite scoring"}
 
     score = compute_location_score(
         lat, lng, demographics, competitors, neighborhood,
-        simulation, brand_fit, hotspot, amenity,
+        brand_fit, hotspot, amenity,
     )
 
     yield {"agent": "orchestrator", "status": "running",
-           "message": f"📈 Scoring complete → {score.total_score:.0f}/100 ({score.rank_label})"}
-    await asyncio.sleep(0.1)
+           "message": f"📈 Scoring complete → {score.total_score:.0f}/100 ({score.rank_label}) · "
+                      f"total {time.perf_counter() - t0:.1f}s"}
 
     result = AnalysisResult(
         lat=lat, lng=lng,
@@ -329,7 +229,7 @@ async def run_orchestrator(
         neighborhood=neighborhood,
         hotspot=hotspot,
         amenity=amenity,
-        simulation=simulation,
+        simulation=None,  # on-demand via /api/simulate
         brand_fit=brand_fit,
         score=score,
         agent_trace=[],
@@ -345,10 +245,17 @@ async def run_orchestrator(
         "data": result.model_dump(),
     }
 
-    # ── Persist to Supabase (async, non-blocking) ─────────────────────────
+    # ── Persist (non-blocking) ────────────────────────────────────────────
     try:
-        from app.services.supabase_service import save_analysis
+        from app.services.supabase_service import save_analysis, cache_set
         score_dict = score.model_dump()
+
+        # Write the full AnalysisResult into the KV cache for warm-path reuse
+        try:
+            loop_kv = asyncio.get_event_loop()
+            loop_kv.run_in_executor(None, cache_set, f"analysis:{ck}", result.model_dump())
+        except Exception as e:
+            print(f"[Supabase] cache_set failed: {e}")
         save_payload = {
             "lat": lat,
             "lng": lng,
@@ -360,7 +267,7 @@ async def run_orchestrator(
             "score_breakdown": {
                 "demand":       score_dict.get("demand_score"),
                 "competition":  score_dict.get("competition_score"),
-                "access":       score_dict.get("access_score"),
+                "access":       score_dict.get("accessibility_score"),
                 "neighborhood": score_dict.get("neighborhood_score"),
                 "brand_fit":    score_dict.get("brand_fit_score"),
                 "risk":         score_dict.get("risk_score"),
@@ -372,8 +279,74 @@ async def run_orchestrator(
             "population": demographics.population if demographics else None,
             "median_income": demographics.median_income if demographics else None,
             "region_city": region_city,
+            "result_payload": result.model_dump(),  # for warm-cache hits
+            "cache_key": ck,
         }
         loop = asyncio.get_event_loop()
         loop.run_in_executor(None, save_analysis, save_payload)
     except Exception as e:
         print(f"[Supabase] Background save failed: {e}")
+
+
+# ── Rebuild helpers (keep orchestrator body readable) ────────────────────────
+
+def _rebuild_demographics(data: dict, lat: float, lng: float, radius_miles: float) -> DemographicsProfile:
+    try:
+        if data:
+            return DemographicsProfile(**data)
+    except Exception as e:
+        print(f"[Orchestrator] DemographicsProfile rebuild failed: {e}")
+    try:
+        from app.services.census_service import get_demographics_for_location
+        return get_demographics_for_location(lat, lng, radius_miles)
+    except Exception as e:
+        print(f"[Orchestrator] Census fallback failed: {e}")
+        from app.services.census_service import _synthetic_demographics
+        return _synthetic_demographics(lat, lng, radius_miles)
+
+
+def _rebuild_competitors(data: dict, lat: float, lng: float, radius_miles: float, brand_name: str) -> CompetitorProfile:
+    try:
+        if data:
+            stores = [CompetitorStore(**s) for s in data.get("stores", [])]
+            return CompetitorProfile(**{**data, "stores": stores})
+    except Exception as e:
+        print(f"[Orchestrator] CompetitorProfile rebuild failed: {e}")
+    try:
+        from app.services.osm_service import get_competitor_profile
+        return get_competitor_profile(lat, lng, radius_miles, brand_name)
+    except Exception as e:
+        print(f"[Orchestrator] OSM fallback failed: {e}")
+        return CompetitorProfile(
+            stores=[], total_count=0, big_box_count=0, same_category_count=0,
+            saturation_score=50.0, demand_signal_score=60.0,
+            competition_score=60.0, underserved=True,
+        )
+
+
+def _rebuild_neighborhood(data: dict) -> NeighborhoodProfile:
+    try:
+        fields = {k: v for k, v in (data or {}).items() if k in NeighborhoodProfile.model_fields}
+        return NeighborhoodProfile(**fields)
+    except Exception:
+        return NeighborhoodProfile(
+            school_quality_index=65.0, family_density_score=60.0,
+            neighborhood_stability=65.0, housing_growth_signal=70.0, overall_score=65.0,
+        )
+
+
+def _rebuild_hotspot(data: dict) -> Optional[HotspotProfile]:
+    if not data:
+        return None
+    try:
+        return HotspotProfile(
+            **{k: v for k, v in data.items() if k != "signals"},
+            signals=[RetailSignal(**s) for s in data.get("signals", [])],
+        )
+    except Exception:
+        return None
+
+
+def _cache_key(lat: float, lng: float, retailer: RetailerProfile, radius_miles: float) -> str:
+    payload = f"{lat:.4f}|{lng:.4f}|{radius_miles:.1f}|{retailer.display_name().lower()}"
+    return hashlib.sha1(payload.encode()).hexdigest()[:16]

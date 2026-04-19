@@ -141,12 +141,30 @@ class CompetitorProfile(BaseModel):
 # Neighborhood & Schools
 # ──────────────────────────────────────────────
 
+class SchoolPoint(BaseModel):
+    name: str
+    lat: float
+    lng: float
+    type: str = "school"   # "school" | "college" | "university"
+    level: Optional[str] = None
+
+
+class GrowthCorridor(BaseModel):
+    name: str
+    lat: float
+    lng: float
+    kind: str = "residential"   # "residential" | "commercial"
+
+
 class NeighborhoodProfile(BaseModel):
     school_quality_index: float     # 0–100
     family_density_score: float     # 0–100
     neighborhood_stability: float   # 0–100
     housing_growth_signal: float    # proxy
     overall_score: float            # 0–100
+    district_name: Optional[str] = None
+    schools:           List[SchoolPoint]    = Field(default_factory=list)
+    growth_corridors:  List[GrowthCorridor] = Field(default_factory=list)
 
 
 # ──────────────────────────────────────────────
@@ -274,7 +292,7 @@ class AnalysisResult(BaseModel):
     neighborhood: NeighborhoodProfile
     hotspot: Optional[HotspotProfile] = None   # TinyFish Layer 1
     amenity: Optional[AmenityProfile] = None   # Infrastructure
-    simulation: SimulationResult
+    simulation: Optional[SimulationResult] = None   # on-demand — user clicks "Run AI Simulation"
     brand_fit: BrandFitProfile
     score: LocationScore
     agent_trace: List[dict]

@@ -11,7 +11,8 @@ using actual census data, but this agent never blocks on it.
 import asyncio
 import math
 import hashlib
-from app.models.schemas import NeighborhoodProfile
+from app.models.schemas import NeighborhoodProfile, SchoolPoint, GrowthCorridor
+from app.services.osm_schools_service import fetch_schools, fetch_growth_corridors
 
 
 # Minneapolis Metro school district quality index (NCES/GreatSchools approximation)
@@ -58,12 +59,50 @@ def get_nearest_school_district(lat: float, lng: float):
     return nearest["name"], round(quality_adj, 1)
 
 
-def compute_neighborhood_profile(lat: float, lng: float) -> tuple:
+def compute_neighborhood_profile(
+    lat: float, lng: float, radius_miles: float = 5.0,
+) -> tuple:
     """
-    Compute neighborhood quality using ONLY lat/lng.
-    Uses school district proximity + stable location-specific synthetic proxies.
+    Compute neighborhood quality using lat/lng + live OSM school & construction
+    layers (when available). The district quality index still comes from the
+    Minneapolis table; schools/growth corridors come from Geoapify/Overpass.
     """
     district_name, school_quality = get_nearest_school_district(lat, lng)
+
+    # Live OSM enrichment — school points + housing / dev signals
+    try:
+        osm_schools = fetch_schools(lat, lng, radius_miles) or []
+    except Exception:
+        osm_schools = []
+    try:
+        growth_pts = fetch_growth_corridors(lat, lng, radius_miles) or []
+    except Exception:
+        growth_pts = []
+
+    school_points: list[SchoolPoint] = []
+    for s in osm_schools[:120]:  # safety cap for payload
+        try:
+            school_points.append(SchoolPoint(**{
+                "name":  s.get("name", "School"),
+                "lat":   float(s["lat"]),
+                "lng":   float(s["lng"]),
+                "type":  s.get("type", "school"),
+                "level": s.get("level"),
+            }))
+        except Exception:
+            continue
+
+    growth_points: list[GrowthCorridor] = []
+    for g in growth_pts[:80]:
+        try:
+            growth_points.append(GrowthCorridor(**{
+                "name": g.get("name", "Development"),
+                "lat":  float(g["lat"]),
+                "lng":  float(g["lng"]),
+                "kind": g.get("kind", "residential"),
+            }))
+        except Exception:
+            continue
 
     # Synthetic demographic proxies (unique per location, consistent across calls)
     family_pct     = _lat_lng_proxy(lat, lng, 1, 50.0, 78.0)
@@ -95,12 +134,21 @@ def compute_neighborhood_profile(lat: float, lng: float) -> tuple:
         + housing_growth * 0.20
     )
 
+    # If OSM gave us a real count of nearby active-construction sites,
+    # nudge the housing-growth signal so it's not just a lat/lng hash.
+    if growth_points:
+        osm_bonus = min(len(growth_points) * 1.2, 25.0)
+        housing_growth = min(housing_growth + osm_bonus, 100.0)
+
     return NeighborhoodProfile(
         school_quality_index=round(school_quality, 1),
         family_density_score=round(family_density, 1),
         neighborhood_stability=round(stability, 1),
         housing_growth_signal=round(housing_growth, 1),
         overall_score=round(min(overall, 100.0), 1),
+        district_name=district_name,
+        schools=school_points,
+        growth_corridors=growth_points,
     ), district_name
 
 
@@ -110,28 +158,14 @@ async def run_schools_agent(lat: float, lng: float, demographics=None):
     demographics param kept for interface compatibility but not required.
     """
     yield {"agent": "schools", "status": "running",
-           "message": "Loading NCES Common Core of Data school district boundaries..."}
-    await asyncio.sleep(0.3)
-
-    yield {"agent": "schools", "status": "running",
-           "message": "Identifying nearest school district and quality index..."}
-    await asyncio.sleep(0.5)
+           "message": "Resolving NCES school districts + neighborhood quality index..."}
 
     profile, district_name = compute_neighborhood_profile(lat, lng)
 
     yield {
         "agent": "schools",
-        "status": "running",
-        "message": (f"Nearest district: {district_name} (quality: {profile.school_quality_index:.0f}/100). "
-                    f"Family density: {profile.family_density_score:.0f}/100. "
-                    f"Neighborhood stability: {profile.neighborhood_stability:.0f}/100."),
-    }
-    await asyncio.sleep(0.2)
-
-    yield {
-        "agent": "schools",
         "status": "done",
-        "message": (f"Neighborhood analysis complete → Score: {profile.overall_score:.0f}/100. "
-                    f"District: {district_name}"),
+        "message": (f"Neighborhood complete → {district_name} (school {profile.school_quality_index:.0f}/100, "
+                    f"stability {profile.neighborhood_stability:.0f}/100, overall {profile.overall_score:.0f}/100)"),
         "data": {**profile.model_dump(), "district_name": district_name},
     }

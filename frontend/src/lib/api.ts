@@ -148,12 +148,30 @@ export interface CompetitorProfile {
   underserved: boolean;
 }
 
+export interface SchoolPoint {
+  name: string;
+  lat: number;
+  lng: number;
+  type?: "school" | "college" | "university" | string;
+  level?: string | null;
+}
+
+export interface GrowthCorridor {
+  name: string;
+  lat: number;
+  lng: number;
+  kind?: "residential" | "commercial" | string;
+}
+
 export interface NeighborhoodProfile {
   school_quality_index: number;
   family_density_score: number;
   neighborhood_stability: number;
   housing_growth_signal: number;
   overall_score: number;
+  district_name?: string | null;
+  schools?: SchoolPoint[];
+  growth_corridors?: GrowthCorridor[];
 }
 
 export interface SimulationResult {
@@ -203,7 +221,7 @@ export interface AnalysisResultV2 {
   neighborhood: NeighborhoodProfile;
   hotspot?: HotspotProfile;
   amenity?: AmenityProfile;
-  simulation: SimulationResult;
+  simulation?: SimulationResult | null;  // on-demand — null until user runs it
   brand_fit: BrandFitProfile;
   score: LocationScore;
   agent_trace: { agent: string; status: string; message: string; data?: any }[];
@@ -238,6 +256,87 @@ export async function analyzeV2(req: AnalyzeV2Request): Promise<AnalysisResultV2
 
 export async function getKnownBrands(): Promise<{ brands: any[]; categories: string[]; sizes: string[]; positioning: string[] }> {
   const res = await fetch(`${BASE}/api/brands`);
+  if (!res.ok) throw new Error(`Brands failed: ${res.status}`);
+  return res.json();
+}
+
+// ── On-demand Market Simulation ──────────────────────────────────────────────
+
+export interface SimulateRequest {
+  lat: number;
+  lng: number;
+  retailer: RetailerProfile;
+  demographics: DemographicsProfile;
+  competitors: CompetitorProfile;
+}
+
+export async function simulateV2(req: SimulateRequest): Promise<SimulationResult> {
+  const res = await fetch(`${BASE}/api/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+// ── K-Means Top-3 Scout ──────────────────────────────────────────────────────
+
+export interface ScoutCandidate {
+  rank: number;
+  lat: number;
+  lng: number;
+  density_score: number;
+  nearest_tract: string;
+  median_income: number;
+  population: number;
+  school_count_2km: number;
+  nearest_comp_km: number | null;
+  avg_traffic_aadt: number;
+  why_it_wins: string[];
+}
+
+export interface ScoutResponse {
+  search: { lat: number; lon: number; radius_km: number };
+  store_format: string;
+  summary: {
+    tracts_considered: number;
+    valid_tracts: number;
+    rivals_considered?: number;
+    schools?: number;
+  };
+  candidates: ScoutCandidate[];
+}
+
+export interface ScoutRequest {
+  lat: number;
+  lon: number;
+  radius_km: number;
+  retailer: RetailerProfile;
+  n_candidates?: number;
+}
+
+export async function scoutTop3(req: ScoutRequest): Promise<ScoutResponse> {
+  const res = await fetch(`${BASE}/api/scout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ n_candidates: 3, ...req }),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch {}
+    throw new Error(detail);
+  }
   return res.json();
 }
 

@@ -287,8 +287,8 @@ export function PricingPage() {
 
       {showAuth && (
         <AuthModal
-          defaultMode="signup"
-          prompt="Create a free account to get started"
+          open={showAuth}
+          intent="default"
           onClose={() => setShowAuth(false)}
         />
       )}

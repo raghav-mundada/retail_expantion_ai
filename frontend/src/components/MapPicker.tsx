@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
-import { ArrowRight, MapPin, Navigation } from "lucide-react";
+import { ArrowRight, MapPin, Navigation, Sparkles } from "lucide-react";
 import { fmtCoord } from "../lib/format";
 
 // Minneapolis Metro — bounds cover the full Twin Cities area
@@ -41,10 +41,11 @@ export interface PickedLocation {
 
 interface Props {
   onAnalyze: (loc: PickedLocation) => void;
+  onScout?: (loc: PickedLocation) => void;
   retailerName?: string;
 }
 
-export function MapPicker({ onAnalyze, retailerName }: Props) {
+export function MapPicker({ onAnalyze, onScout, retailerName }: Props) {
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
   const [radius, setRadius] = useState(5);
 
@@ -167,7 +168,7 @@ export function MapPicker({ onAnalyze, retailerName }: Props) {
             </div>
           </div>
 
-          {/* CTA */}
+          {/* CTAs */}
           <button
             onClick={() => pin && onAnalyze({ lat: pin.lat, lon: pin.lon, radius_km: radius })}
             disabled={!ready}
@@ -180,6 +181,23 @@ export function MapPicker({ onAnalyze, retailerName }: Props) {
             </span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
           </button>
+
+          {onScout && (
+            <button
+              onClick={() => pin && onScout({ lat: pin.lat, lon: pin.lon, radius_km: radius })}
+              disabled={!ready}
+              className="w-full bg-snow text-ink py-4 px-6 hairline-t flex items-center justify-between
+                         transition-all duration-200 hover:bg-bone disabled:text-mist
+                         disabled:cursor-not-allowed group"
+              title="K-means clusters the best 3 tracts inside this circle"
+            >
+              <span className="text-xs font-medium tracking-snug flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-emerald" strokeWidth={1.5} />
+                Scout top 3 targets instead
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform text-graphite" strokeWidth={1.5} />
+            </button>
+          )}
         </div>
       </motion.div>
 

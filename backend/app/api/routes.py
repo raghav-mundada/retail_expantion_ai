@@ -6,6 +6,7 @@ import asyncio
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.models.schemas import (
     AnalyzeRequest,
@@ -14,8 +15,13 @@ from app.models.schemas import (
     StoreSizeEnum,
     ProductCategory,
     PricePositioning,
+    DemographicsProfile,
+    CompetitorProfile,
+    CompetitorStore,
+    SimulationResult,
 )
 from app.agents.orchestrator import run_orchestrator
+from app.agents.simulation import run_simulation_agent
 from app.services.osm_service import fetch_competitors
 
 router = APIRouter()
@@ -155,9 +161,43 @@ async def health():
     return {
         "status": "ok",
         "service": "RetailIQ API",
-        "version": "2.0.0",
-        "features": ["brand_resolver", "hotspot_agent", "amenity_agent", "universal_retailer", "history"],
+        "version": "2.1.0",
+        "features": [
+            "brand_resolver", "hotspot_agent", "amenity_agent",
+            "universal_retailer", "history",
+            "on_demand_simulation", "kmeans_scout",
+        ],
     }
+
+
+# ── On-demand Simulation ──────────────────────────────────────────────────────
+
+class SimulateRequest(BaseModel):
+    lat: float = Field(..., ge=24.0, le=50.0)
+    lng: float = Field(..., ge=-125.0, le=-65.0)
+    retailer: RetailerProfile
+    demographics: DemographicsProfile
+    competitors: CompetitorProfile
+
+
+@router.post("/simulate", response_model=SimulationResult)
+async def simulate(body: SimulateRequest):
+    """
+    Run just the market simulation agent against an already-analyzed site.
+    Called on-demand when the user clicks "Run AI Simulation" in the dashboard,
+    so /api/analyze stays fast.
+    """
+    brand = body.retailer.display_name()
+    final: SimulationResult | None = None
+    async for event in run_simulation_agent(body.lat, body.lng, body.demographics, body.competitors, brand):
+        if event.get("status") == "done" and event.get("data"):
+            try:
+                final = SimulationResult(**event["data"])
+            except Exception:
+                final = None
+    if final is None:
+        raise HTTPException(status_code=500, detail="Simulation failed — no result produced")
+    return final
 
 
 @router.get("/history")

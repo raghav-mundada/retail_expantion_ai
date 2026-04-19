@@ -28,14 +28,16 @@ class Settings(BaseSettings):
     default_radius_miles: float = 5.0
 
     # ── Analysis pipeline performance (blocking /api/analyze) ─────────────────
-    # TinyFish Agent runs are the main latency source; keep these modest for UX.
-    tinyfish_agent_timeout_seconds: int = 22
-    tinyfish_search_http_timeout_seconds: int = 12
+    # Tuned aggressively for sub-30s cold-path /api/analyze. On timeout any
+    # individual agent falls back to deterministic proxies — analysis still returns.
+    tinyfish_agent_timeout_seconds: int = 8
+    tinyfish_search_http_timeout_seconds: int = 6
     # Wall-clock cap for all hotspot TinyFish work; on timeout → fast proxy hotspot.
-    analysis_hotspot_total_budget_seconds: float = 36.0
+    analysis_hotspot_total_budget_seconds: float = 12.0
+    # Simulation timeout is only used on /api/simulate now — we can afford to be generous.
     analysis_simulation_openai_timeout_seconds: float = 26.0
-    analysis_brand_narrative_timeout_seconds: float = 12.0
-    analysis_brand_resolver_openai_timeout_seconds: float = 18.0
+    analysis_brand_narrative_timeout_seconds: float = 6.0
+    analysis_brand_resolver_openai_timeout_seconds: float = 8.0
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
