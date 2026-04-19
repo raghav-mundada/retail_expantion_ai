@@ -240,46 +240,37 @@ function Kpi({ icon, label, value, sub, border }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART: Income distribution — # of census tracts per income band
+// CHART: Income distribution
 // ─────────────────────────────────────────────────────────────────────────────
 function IncomeChart({ tracts }: { tracts: any[] }) {
   const buckets = [
-    { range: "<$30K",     min: 0,       max: 30000  },
-    { range: "$30–60K",   min: 30000,   max: 60000  },
-    { range: "$60–90K",   min: 60000,   max: 90000  },
-    { range: "$90–120K",  min: 90000,   max: 120000 },
-    { range: "$120–150K", min: 120000,  max: 150000 },
-    { range: "$150K+",    min: 150000,  max: 1e9    },
+    { range: "<$30K",     min: 0,      max: 30000  },
+    { range: "$30–60K",   min: 30000,  max: 60000  },
+    { range: "$60–90K",   min: 60000,  max: 90000  },
+    { range: "$90–120K",  min: 90000,  max: 120000 },
+    { range: "$120–150K", min: 120000, max: 150000 },
+    { range: "$150K+",    min: 150000, max: 1e9    },
   ];
   const data = buckets.map((b) => {
     const matched = tracts.filter((t) => (t.median_hh_income || 0) >= b.min && (t.median_hh_income || 0) < b.max);
-    const totalHH = matched.reduce((s, t) => s + (t.total_households || 0), 0);
-    const totalPop = matched.reduce((s, t) => s + (t.total_population || 0), 0);
     return {
       range: b.range,
       tracts: matched.length,
-      households: totalHH,
-      population: totalPop,
+      households: matched.reduce((s, t) => s + (t.total_households || 0), 0),
+      population: matched.reduce((s, t) => s + (t.total_population || 0), 0),
     };
   });
 
-  // Color the dominant bucket darker — tells the eye where the median income falls
   const maxIx = data.reduce((m, d, i) => (d.tracts > data[m].tracts ? i : m), 0);
   const colors = data.map((_, i) => i === maxIx ? "#047857" : "#0A0A0A");
 
   return (
     <div>
-      {/* Legend */}
       <div className="flex items-center gap-4 mb-4 label-xs">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-emerald" /> DOMINANT BAND
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-ink" /> OTHER BANDS
-        </span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald" /> DOMINANT BAND</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-ink" /> OTHER BANDS</span>
         <span className="text-mist ml-auto">Y-AXIS = NUMBER OF CENSUS TRACTS</span>
       </div>
-
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 16, right: 8, bottom: 8, left: 0 }}>
@@ -293,27 +284,11 @@ function IncomeChart({ tracts }: { tracts: any[] }) {
                 <stop offset="100%" stopColor="#0A0A0A" stopOpacity={0.65} />
               </linearGradient>
             </defs>
-            <XAxis
-              dataKey="range"
-              axisLine={false} tickLine={false}
-              tick={{ fontSize: 11, fill: "#71717A", fontFamily: "Geist Mono" }}
+            <XAxis dataKey="range" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#71717A", fontFamily: "Geist Mono" }} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#A1A1AA", fontFamily: "Geist Mono" }} width={36} allowDecimals={false}
+              label={{ value: "TRACTS", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "#A1A1AA", fontFamily: "Geist Mono", letterSpacing: "0.16em" } }}
             />
-            <YAxis
-              axisLine={false} tickLine={false}
-              tick={{ fontSize: 11, fill: "#A1A1AA", fontFamily: "Geist Mono" }}
-              width={36}
-              allowDecimals={false}
-              label={{
-                value: "TRACTS",
-                angle: -90,
-                position: "insideLeft",
-                style: { fontSize: 10, fill: "#A1A1AA", fontFamily: "Geist Mono", letterSpacing: "0.16em" },
-              }}
-            />
-            <Tooltip
-              cursor={{ fill: "#F5F5F4" }}
-              content={<IncomeTooltip />}
-            />
+            <Tooltip cursor={{ fill: "#F5F5F4" }} content={<IncomeTooltip />} />
             <Bar dataKey="tracts" radius={0} maxBarSize={80} animationDuration={1100} animationEasing="ease-out">
               {data.map((_, i) => (
                 <Cell key={i} fill={colors[i] === "#047857" ? "url(#emeraldGrad)" : "url(#inkGrad)"} />
@@ -354,10 +329,9 @@ function IncomeTooltip({ active, payload, label }: any) {
 // CHART: Traffic AADT bar
 // ─────────────────────────────────────────────────────────────────────────────
 function TrafficChart({ points }: { points: any[] }) {
-  const data = points.map((p) => ({
-    name: (p.street_name || "—").slice(0, 24),
-    aadt: p.aadt || 0,
-  }));
+  const data = points
+    .filter((p) => p.street_name && p.street_name !== "nan" && (p.aadt || 0) > 0)
+    .map((p) => ({ name: p.street_name.slice(0, 24), aadt: p.aadt }));
   const max = Math.max(...data.map((d) => d.aadt), 1);
 
   return (
@@ -370,20 +344,14 @@ function TrafficChart({ points }: { points: any[] }) {
               <stop offset="100%" stopColor="#0F766E" stopOpacity={1} />
             </linearGradient>
           </defs>
-          <XAxis
-            type="number"
-            axisLine={false} tickLine={false}
+          <XAxis type="number" axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: "#A1A1AA", fontFamily: "Geist Mono" }}
             tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
           />
-          <YAxis
-            dataKey="name" type="category"
-            axisLine={false} tickLine={false}
-            tick={{ fontSize: 11, fill: "#3F3F46" }}
-            width={150}
+          <YAxis dataKey="name" type="category" axisLine={false} tickLine={false}
+            tick={{ fontSize: 11, fill: "#3F3F46" }} width={150}
           />
-          <Tooltip
-            cursor={{ fill: "#F5F5F4" }}
+          <Tooltip cursor={{ fill: "#F5F5F4" }}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const d = payload[0].payload;
@@ -412,22 +380,16 @@ function CompetitorList({ competitors }: { competitors: any[] }) {
     <div className="divide-y divide-hairline">
       {competitors.map((c, i) => (
         <div key={i} className="py-3 flex items-baseline gap-3">
-          <span className="font-mono text-[10px] tabular text-mist w-5">
-            {String(i + 1).padStart(2, "0")}
-          </span>
+          <span className="font-mono text-[10px] tabular text-mist w-5">{String(i + 1).padStart(2, "0")}</span>
           <div className="flex-1 min-w-0">
             <div className="text-sm text-ink truncate">{c.name || "—"}</div>
             <div className="label-xs mt-0.5">{c.shop_type || "store"}</div>
           </div>
-          <div className="font-mono text-sm tabular text-emerald">
-            {Number(c.dist_km || 0).toFixed(2)} km
-          </div>
+          <div className="font-mono text-sm tabular text-emerald">{Number(c.dist_km || 0).toFixed(2)} km</div>
         </div>
       ))}
       {competitors.length === 0 && (
-        <div className="py-8 text-center text-mist italic font-display text-lg">
-          No competitors found in this radius.
-        </div>
+        <div className="py-8 text-center text-mist italic font-display text-lg">No competitors found in this radius.</div>
       )}
     </div>
   );
@@ -446,8 +408,7 @@ function FormatMix({ competitors }: { competitors: any[] }) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6)
     .map(([name, count], i) => ({
-      name,
-      count,
+      name, count,
       fill: ["#0A0A0A", "#047857", "#3F3F46", "#71717A", "#A1A1AA", "#D4D4D8"][i],
     }));
   const max = Math.max(...top.map((t) => t.count), 1);
@@ -476,7 +437,7 @@ function FormatMix({ competitors }: { competitors: any[] }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPATIAL MAP — hover any marker to see name, address, distance
+// SPATIAL MAP
 // ─────────────────────────────────────────────────────────────────────────────
 function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }: any) {
   const pinIcon = L.divIcon({
@@ -488,30 +449,26 @@ function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }
 
   return (
     <div className="relative h-[520px] w-full">
-      {/* Map legend overlay */}
+      {/* Dynamic legend — only shows categories with data */}
       <div className="absolute top-4 right-4 z-[500] bg-snow border border-hairline px-4 py-3 shadow-md">
         <div className="label-xs mb-2.5">LEGEND</div>
         <div className="space-y-1.5">
           <LegendItem color="#047857" label="Your pin" size={10} ring />
-          <LegendItem color="#0A0A0A" label={`Competitors (${competitors.length})`} size={6} />
-          <LegendItem color="#B45309" label={`Schools (${schools?.length || 0})`} size={5} />
-          <LegendItem color="#1E40AF" label={`Neighborhoods (${neighborhoods?.length || 0})`} size={4} />
+          {competitors.length > 0 && (
+            <LegendItem color="#0A0A0A" label={`Competitors (${competitors.length})`} size={6} />
+          )}
+          {(schools?.length ?? 0) > 0 && (
+            <LegendItem color="#B45309" label={`Schools (${schools.length})`} size={5} />
+          )}
+          {(neighborhoods?.length ?? 0) > 0 && (
+            <LegendItem color="#1E40AF" label={`Neighborhoods (${neighborhoods.length})`} size={4} />
+          )}
         </div>
       </div>
 
-      <MapContainer
-        center={[lat, lon]}
-        zoom={13}
-        scrollWheelZoom={true}
-        className="h-full w-full"
-      >
-        <TileLayer
-          attribution=""
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        />
-        <Circle
-          center={[lat, lon]}
-          radius={radius_km * 1000}
+      <MapContainer center={[lat, lon]} zoom={13} scrollWheelZoom={true} className="h-full w-full">
+        <TileLayer attribution="" url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+        <Circle center={[lat, lon]} radius={radius_km * 1000}
           pathOptions={{ color: "#047857", weight: 1.5, fillColor: "#047857", fillOpacity: 0.05 }}
         />
         <Marker position={[lat, lon]} icon={pinIcon}>
@@ -522,16 +479,9 @@ function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }
           </LeafletTooltip>
         </Marker>
 
-        {/* Competitors — black dots */}
         {competitors.slice(0, 200).map((c: any, i: number) => (
-          <CircleMarker
-            key={`c-${i}`}
-            center={[c.lat, c.lon]}
-            radius={5}
-            pathOptions={{
-              color: "#0A0A0A", weight: 1.5,
-              fillColor: "#0A0A0A", fillOpacity: 0.85,
-            }}
+          <CircleMarker key={`c-${i}`} center={[c.lat, c.lon]} radius={5}
+            pathOptions={{ color: "#0A0A0A", weight: 1.5, fillColor: "#0A0A0A", fillOpacity: 0.85 }}
             eventHandlers={{
               mouseover: (e) => e.target.setStyle({ radius: 8, fillOpacity: 1, color: "#047857" }),
               mouseout:  (e) => e.target.setStyle({ radius: 5, fillOpacity: 0.85, color: "#0A0A0A" }),
@@ -546,16 +496,9 @@ function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }
           </CircleMarker>
         ))}
 
-        {/* Schools — amber */}
         {schools?.slice(0, 200).map((s: any, i: number) => (
-          <CircleMarker
-            key={`s-${i}`}
-            center={[s.lat, s.lon]}
-            radius={4}
-            pathOptions={{
-              color: "#B45309", weight: 1,
-              fillColor: "#B45309", fillOpacity: 0.7,
-            }}
+          <CircleMarker key={`s-${i}`} center={[s.lat, s.lon]} radius={4}
+            pathOptions={{ color: "#B45309", weight: 1, fillColor: "#B45309", fillOpacity: 0.7 }}
             eventHandlers={{
               mouseover: (e) => e.target.setStyle({ radius: 7, fillOpacity: 1 }),
               mouseout:  (e) => e.target.setStyle({ radius: 4, fillOpacity: 0.7 }),
@@ -569,16 +512,9 @@ function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }
           </CircleMarker>
         ))}
 
-        {/* Neighborhood centroids — blue */}
         {neighborhoods?.slice(0, 80).map((n: any, i: number) => (
-          <CircleMarker
-            key={`n-${i}`}
-            center={[n.centroid_lat, n.centroid_lon]}
-            radius={6}
-            pathOptions={{
-              color: "#1E40AF", weight: 2,
-              fillColor: "#1E40AF", fillOpacity: 0.15,
-            }}
+          <CircleMarker key={`n-${i}`} center={[n.centroid_lat, n.centroid_lon]} radius={6}
+            pathOptions={{ color: "#1E40AF", weight: 2, fillColor: "#1E40AF", fillOpacity: 0.15 }}
             eventHandlers={{
               mouseover: (e) => e.target.setStyle({ radius: 10, fillOpacity: 0.4 }),
               mouseout:  (e) => e.target.setStyle({ radius: 6, fillOpacity: 0.15 }),
@@ -599,15 +535,10 @@ function SpatialMap({ lat, lon, radius_km, competitors, schools, neighborhoods }
 function LegendItem({ color, label, size, ring }: any) {
   return (
     <div className="flex items-center gap-2.5 text-xs text-graphite">
-      <div
-        className="rounded-full flex-shrink-0"
-        style={{
-          width: size,
-          height: size,
-          background: color,
-          boxShadow: ring ? `0 0 0 2px white, 0 0 0 3px ${color}` : "none",
-        }}
-      />
+      <div className="rounded-full flex-shrink-0" style={{
+        width: size, height: size, background: color,
+        boxShadow: ring ? `0 0 0 2px white, 0 0 0 3px ${color}` : "none",
+      }} />
       {label}
     </div>
   );
