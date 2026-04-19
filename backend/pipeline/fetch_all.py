@@ -227,10 +227,25 @@ def pull_demographics(lat, lon, radius_km):
 
 # ── Source 2: Competitor Stores (Geoapify) ──────────────────────────────────
 
-def pull_competitor_stores(lat, lon, radius_km):
+RIVAL_TYPES = {
+    "grocery":          {"supermarket", "convenience", "department_store", "food_and_drink", "bakery"},
+    "supermarket":      {"supermarket", "convenience", "department_store"},
+    "convenience":      {"convenience", "supermarket", "food_and_drink"},
+    "pharmacy":         {"chemist", "department_store", "health_and_beauty"},
+    "department_store": {"department_store", "supermarket"},
+    "default":          {"supermarket", "convenience", "department_store", "chemist", "food_and_drink", "bakery"},
+}
+
+def pull_competitor_stores(lat, lon, radius_km, store_type="grocery"):
     log.info("[2/6] Competitor stores (Geoapify)...")
     try:
-        categories = "commercial.supermarket"
+        categories = ",".join([
+            "commercial.supermarket",
+            "commercial.department_store",
+            "commercial.convenience",
+            "commercial.chemist",
+            "commercial.food_and_drink",
+        ])
         features = _geoapify_query(lat, lon, radius_km, categories)
 
         stores = []
@@ -257,13 +272,16 @@ def pull_competitor_stores(lat, lon, radius_km):
                 "district"   : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
             })
 
+        # Filter to only actual rivals for this store type
+        rival_set = RIVAL_TYPES.get(store_type, RIVAL_TYPES["default"])
+        stores = [s for s in stores if s["shop_type"] in rival_set]
+
         stores.sort(key=lambda x: x["dist_km"] or 999)
-        log.info(f"  Found {len(stores)} stores")
+        log.info(f"  Found {len(stores)} stores ({store_type} rivals only)")
         return {"count": len(stores), "stores": stores}
     except Exception as e:
         log.error(f"  Stores failed: {e}")
         return {"error": str(e), "count": 0, "stores": []}
-
 
 # ── Source 3: Commercial Parcels ─────────────────────────────────────────────
 
@@ -451,7 +469,7 @@ def pull_neighborhoods(lat, lon, radius_km):
 
 # ── Unified runner ────────────────────────────────────────────────────────────
 
-def run_all(lat: float, lon: float, radius_km: float, out_path: Path = None) -> dict:
+def run_all(lat: float, lon: float, radius_km: float, out_path: Path = None, store_type: str = "grocery") -> dict:
     log.info("=" * 65)
     log.info(f"Unified Pipeline  —  ({lat}, {lon})  radius={radius_km} km")
     log.info("=" * 65)
@@ -465,7 +483,7 @@ def run_all(lat: float, lon: float, radius_km: float, out_path: Path = None) -> 
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         },
         "demographics"      : pull_demographics(lat, lon, radius_km),
-        "competitor_stores" : pull_competitor_stores(lat, lon, radius_km),
+        "competitor_stores" : pull_competitor_stores(lat, lon, radius_km, store_type=store_type),
         "commercial_parcels": pull_parcels(lat, lon, radius_km),
         "schools"           : pull_schools(lat, lon, radius_km),
         "traffic_aadt"      : pull_traffic(lat, lon, radius_km),
