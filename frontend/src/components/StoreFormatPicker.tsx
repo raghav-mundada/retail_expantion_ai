@@ -4,9 +4,16 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export type StoreFormat =
   | "Target"
+  | "Walmart"
+  | "Costco"
+  | "Home Depot"
+  | "Best Buy"
   | "Walgreens"
+  | "CVS"
   | "Whole Foods"
   | "Trader Joe's"
+  | "Aldi"
+  | "Starbucks"
   | "Local Grocery"
   | "Convenience Store"
   | "Coffee Shop";
@@ -15,17 +22,34 @@ interface FormatOption {
   key: StoreFormat;
   label: string;
   blurb: string;
-  tier: "BIG BOX" | "GROCERY" | "PHARMACY" | "INDEPENDENT" | "QUICK STOP" | "F&B";
+  tier:
+    | "BIG BOX"
+    | "WAREHOUSE"
+    | "HOME IMPROVEMENT"
+    | "ELECTRONICS"
+    | "GROCERY"
+    | "PHARMACY"
+    | "INDEPENDENT"
+    | "QUICK STOP"
+    | "F&B";
 }
 
+// 14 store formats — keep in sync with backend STORE_FORMATS in metrics.py
 const FORMATS: FormatOption[] = [
-  { key: "Target",            label: "Target",            blurb: "Big-box general merchandise",      tier: "BIG BOX" },
+  { key: "Best Buy",          label: "Best Buy",          blurb: "Consumer electronics",              tier: "ELECTRONICS" },
+  { key: "Target",            label: "Target",            blurb: "Big-box general merchandise",       tier: "BIG BOX" },
+  { key: "Walmart",           label: "Walmart",           blurb: "Supercenter · GM + grocery",        tier: "BIG BOX" },
+  { key: "Costco",            label: "Costco",            blurb: "Members-only bulk warehouse",       tier: "WAREHOUSE" },
+  { key: "Home Depot",        label: "Home Depot",        blurb: "DIY / home improvement",            tier: "HOME IMPROVEMENT" },
   { key: "Whole Foods",       label: "Whole Foods",       blurb: "Premium grocery, $85K+ income",     tier: "GROCERY" },
   { key: "Trader Joe's",      label: "Trader Joe's",      blurb: "Mid-size specialty grocery",        tier: "GROCERY" },
+  { key: "Aldi",              label: "Aldi",              blurb: "Discount grocery, value shoppers",  tier: "GROCERY" },
   { key: "Walgreens",         label: "Walgreens",         blurb: "Pharmacy + convenience",            tier: "PHARMACY" },
+  { key: "CVS",               label: "CVS",               blurb: "Pharmacy + health services",        tier: "PHARMACY" },
+  { key: "Starbucks",         label: "Starbucks",         blurb: "Premium coffee chain",              tier: "F&B" },
+  { key: "Coffee Shop",       label: "Coffee Shop",       blurb: "Cafe / espresso bar",               tier: "F&B" },
   { key: "Local Grocery",     label: "Local Grocery",     blurb: "Independent neighborhood market",   tier: "INDEPENDENT" },
   { key: "Convenience Store", label: "Convenience Store", blurb: "Corner store / gas station",        tier: "QUICK STOP" },
-  { key: "Coffee Shop",       label: "Coffee Shop",       blurb: "Cafe / espresso bar",               tier: "F&B" },
 ];
 
 interface Props {
@@ -72,7 +96,8 @@ export function StoreFormatPicker({ value, onChange }: Props) {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
             className="absolute z-[1100] mt-1 w-full bg-snow border border-hairline
-                       shadow-[0_24px_60px_-30px_rgba(0,0,0,0.25)] max-h-[360px] overflow-y-auto"
+                       shadow-[0_24px_60px_-30px_rgba(0,0,0,0.25)]
+                       max-h-[min(640px,calc(100vh-14rem))] overflow-y-auto"
           >
             {FORMATS.map((f) => {
               const active = f.key === value;
@@ -80,7 +105,7 @@ export function StoreFormatPicker({ value, onChange }: Props) {
                 <button
                   key={f.key}
                   onClick={() => { onChange(f.key); setOpen(false); }}
-                  className={`w-full text-left px-4 py-3 hairline-b last:border-b-0
+                  className={`w-full text-left px-4 py-3.5 hairline-b last:border-b-0
                               hover:bg-bone transition flex items-start justify-between gap-3
                               ${active ? "bg-bone" : ""}`}
                 >
