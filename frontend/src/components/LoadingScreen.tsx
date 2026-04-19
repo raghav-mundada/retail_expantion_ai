@@ -82,7 +82,7 @@ export function LoadingScreen({ lat, lon, radius_km, onComplete, fetchPromise }:
   const progress = rows.filter((r) => r.status === "done").length / rows.length;
 
   return (
-    <div className="relative h-[calc(100vh-4rem)] w-full bg-paper overflow-hidden">
+    <div className="relative min-h-[calc(100vh-4rem)] w-full bg-paper overflow-y-auto">
       {/* Faint grid background */}
       <div
         className="absolute inset-0 opacity-[0.035]"
