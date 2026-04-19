@@ -6,6 +6,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── CSS custom properties (warm palette) ──────────────────────────────── */
+:root {
+  --c-ink:      #2C1810;
+  --c-graphite: #5C3D1E;
+  --c-slate:    #8B6F4E;
+  --c-mist:     #B8956A;
+  --c-hairline: #D4BFA0;
+  --c-bone:     #EDE0D4;
+  --c-paper:    #F5EFE6;
+  --c-snow:     #FBF7F2;
+  --c-warm:     #C8A882;
+  --c-mocha:    #A07850;
+  --c-emerald:  #2D6A4F;
+  --c-amber:    #B45309;
+
+  /* Warm shadows */
+  --shadow-sm:  0 1px 3px rgba(44, 24, 16, 0.08);
+  --shadow-md:  0 4px 16px rgba(44, 24, 16, 0.10);
+  --shadow-lg:  0 10px 40px rgba(44, 24, 16, 0.14);
+  --shadow-warm:0 8px 32px rgba(200, 168, 130, 0.20);
+}
+
 @layer base {
   html, body, #root {
     height: 100%;
@@ -14,24 +36,31 @@
     @apply bg-paper text-ink font-sans antialiased;
     font-feature-settings: "ss01", "ss02", "cv01", "cv02";
   }
+
   /* Tabular figures for all numbers — premium data feel */
   .tabular { font-variant-numeric: tabular-nums; }
 
-  /* Custom scrollbar — subtle, premium */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  /* ── Warm scrollbars ──────────────────────────────────────────────────── */
+  * { scrollbar-width: thin; scrollbar-color: var(--c-warm) transparent; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--c-warm);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--c-mocha); }
 
-  /* Selection */
-  ::selection { background: #047857; color: white; }
+  /* ── Selection ───────────────────────────────────────────────────────── */
+  ::selection { background: var(--c-mocha); color: var(--c-snow); }
 }
 
 @layer components {
+  /* ── Hairlines ──────────────────────────────────────────────────────── */
   .hairline-b { @apply border-b border-hairline; }
   .hairline-t { @apply border-t border-hairline; }
   .hairline   { @apply border border-hairline; }
 
+  /* ── Typography labels ──────────────────────────────────────────────── */
   .label-xs {
     @apply font-mono text-[10px] uppercase tracking-[0.18em] text-slate;
   }
@@ -39,6 +68,7 @@
     @apply font-mono text-[11px] uppercase tracking-[0.16em] text-graphite;
   }
 
+  /* ── Display sizes ──────────────────────────────────────────────────── */
   .display-xl {
     @apply font-display text-[clamp(3rem,8vw,7rem)] leading-[0.95] tracking-tightest;
   }
@@ -49,85 +79,266 @@
     @apply font-display text-[clamp(2rem,3.5vw,3rem)] leading-[1] tracking-tightest;
   }
 
+  /* ── Reactive buttons ────────────────────────────────────────────────── */
+  /* All btn classes share a transform/shadow interaction model */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
            bg-ink text-snow px-6 py-3 text-sm font-medium
-           transition-all duration-200 hover:bg-graphite
-           disabled:opacity-40 disabled:cursor-not-allowed
-           border border-ink rounded-none;
+           border border-ink rounded-none select-none
+           transition-all duration-[180ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)];
   }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-graphite;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(44, 24, 16, 0.22);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.97) translateY(0);
+    box-shadow: 0 2px 8px rgba(44, 24, 16, 0.12);
+  }
+  .btn-primary:disabled { @apply opacity-40 cursor-not-allowed; }
+
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
            bg-snow text-ink px-6 py-3 text-sm font-medium
-           transition-all duration-200 hover:bg-bone
-           border border-hairline hover:border-ink rounded-none;
+           border border-hairline rounded-none select-none
+           transition-all duration-[180ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)];
   }
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-bone border-mocha;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(44, 24, 16, 0.10);
+  }
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(0.97) translateY(0);
+    box-shadow: none;
+  }
+
   .btn-accent {
     @apply inline-flex items-center justify-center gap-2
            bg-emerald text-snow px-6 py-3 text-sm font-medium
-           transition-all duration-200 hover:bg-emerald/90
-           border border-emerald rounded-none;
+           border border-emerald rounded-none select-none
+           transition-all duration-[180ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)];
+  }
+  .btn-accent:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(45, 106, 79, 0.28);
+  }
+  .btn-accent:active:not(:disabled) {
+    transform: scale(0.97) translateY(0);
+    box-shadow: none;
   }
 
+  /* Warm highlight CTA button */
+  .btn-warm {
+    @apply inline-flex items-center justify-center gap-2
+           text-snow px-6 py-3 text-sm font-medium
+           rounded-none select-none
+           transition-all duration-[180ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)];
+    background: linear-gradient(135deg, #A07850 0%, #C8A882 50%, #8B6F4E 100%);
+    background-size: 200% auto;
+    border: 1px solid rgba(200,168,130,0.4);
+  }
+  .btn-warm:hover:not(:disabled) {
+    background-position: right center;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(160, 120, 80, 0.35);
+  }
+  .btn-warm:active:not(:disabled) {
+    transform: scale(0.97) translateY(0);
+    box-shadow: 0 2px 8px rgba(160, 120, 80, 0.18);
+  }
+
+  /* ── Cards with reactive hover ─────────────────────────────────────── */
   .card {
-    @apply bg-snow border border-hairline;
+    @apply bg-snow border border-hairline
+           transition-all duration-200 ease-out;
+  }
+  .card-hover {
+    @apply card cursor-pointer;
+  }
+  .card-hover:hover {
+    border-color: var(--c-warm);
+    box-shadow: var(--shadow-warm);
+    transform: translateY(-1px);
+  }
+  .card-hover:hover > * { transform: scale(1.005); }
+
+  /* ── Data rows — warm highlight on hover ───────────────────────────── */
+  .data-row {
+    @apply relative transition-all duration-150;
+  }
+  .data-row:hover {
+    background: rgba(200, 168, 130, 0.10);
+  }
+  .data-row::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--c-warm);
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .data-row:hover::before { opacity: 1; }
+
+  /* ── Input focus ring ──────────────────────────────────────────────── */
+  .input-warm {
+    @apply bg-transparent border border-hairline outline-none
+           transition-all duration-[180ms]
+           text-ink placeholder:text-mist;
+    padding: 10px 14px;
+  }
+  .input-warm:focus {
+    border-color: var(--c-warm);
+    box-shadow: 0 0 0 3px rgba(200, 168, 130, 0.25);
   }
 
   .input-bare {
     @apply bg-transparent border-0 outline-none focus:ring-0
            font-display text-4xl tabular text-ink placeholder:text-mist;
   }
+
+  /* ── Loading shimmer ───────────────────────────────────────────────── */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--c-bone) 0%,
+      var(--c-warm) 50%,
+      var(--c-bone) 100%
+    );
+    background-size: 200% auto;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* ── Metric value highlight ────────────────────────────────────────── */
+  .metric-glow {
+    color: var(--c-graphite);
+    transition: color 300ms ease;
+  }
+  .metric-glow.active {
+    color: var(--c-ink);
+    text-shadow: 0 0 20px rgba(200, 168, 130, 0.4);
+  }
+
+  /* ── Fade-in-up for scroll reveals ────────────────────────────────── */
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.55s cubic-bezier(0.16,1,0.3,1),
+                transform 0.55s cubic-bezier(0.16,1,0.3,1);
+  }
+  .scroll-reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Tooltip ────────────────────────────────────────────────────────── */
+  .tooltip-warm {
+    @apply absolute z-50 px-3 py-2 text-xs text-snow rounded-none pointer-events-none
+           whitespace-nowrap transition-all duration-150;
+    background: var(--c-graphite);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-4px);
+  }
 }
 
-/* Leaflet override — make tiles feel premium and quiet */
+/* ── Subtle edge grain pattern ─────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.045;
+  background-image:
+    radial-gradient(circle, #8B6F4E 1px, transparent 1px),
+    radial-gradient(circle, #8B6F4E 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: 0 0, 24px 24px;
+  /* Only on edges — mask the center out */
+  -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%,
+    transparent 40%, black 100%);
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%,
+    transparent 40%, black 100%);
+}
+
+/* ── Leaflet warm overrides ────────────────────────────────────────────── */
 .leaflet-container {
-  background: #FAFAF9 !important;
+  background: #F5EFE6 !important;
   font-family: "Geist", system-ui, sans-serif !important;
 }
 .leaflet-tile {
-  filter: grayscale(0.65) contrast(0.95) brightness(1.02);
+  filter: sepia(0.15) contrast(0.93) brightness(1.02);
 }
 .leaflet-control-attribution {
   font-size: 9px !important;
-  background: rgba(255,255,255,0.6) !important;
+  background: rgba(251,247,242,0.7) !important;
   padding: 2px 6px !important;
+  color: var(--c-slate) !important;
 }
 .leaflet-control-zoom {
-  border: 1px solid #E4E4E7 !important;
+  border: 1px solid var(--c-hairline) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 .leaflet-control-zoom a {
-  background: white !important;
-  color: #0A0A0A !important;
+  background: var(--c-snow) !important;
+  color: var(--c-ink) !important;
   border-radius: 0 !important;
   font-weight: 300 !important;
 }
-.leaflet-control-zoom a:hover { background: #F5F5F4 !important; }
+.leaflet-control-zoom a:hover {
+  background: var(--c-bone) !important;
+}
 
-/* Pulsing pin */
+/* ── Pulsing map pin ────────────────────────────────────────────────────── */
 .pin-pulse::before {
   content: "";
   position: absolute;
   inset: -8px;
   border-radius: 9999px;
-  background: rgba(4, 120, 87, 0.25);
+  background: rgba(45, 106, 79, 0.22);
   animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
-/* Premium Leaflet tooltip — overrides the default cartoony bubble */
+/* ── Leaflet tooltip (warm) ─────────────────────────────────────────────── */
 .leaflet-tooltip.atlas-tooltip {
-  background: #FFFFFF !important;
-  border: 1px solid #E4E4E7 !important;
+  background: var(--c-snow) !important;
+  border: 1px solid var(--c-hairline) !important;
   border-radius: 0 !important;
-  box-shadow: 0 10px 30px -10px rgba(0,0,0,0.18) !important;
+  box-shadow: var(--shadow-md) !important;
   padding: 10px 12px !important;
   font-family: "Geist", system-ui, sans-serif !important;
-  color: #0A0A0A !important;
-  white-space: nowrap;
-  max-width: 240px;
+  color: var(--c-ink) !important;
   white-space: normal;
+  max-width: 240px;
 }
 .leaflet-tooltip.atlas-tooltip::before {
-  border-top-color: #E4E4E7 !important;
+  border-top-color: var(--c-hairline) !important;
+}
+
+/* ── Simulation canvas overlay ──────────────────────────────────────────── */
+.sim-overlay {
+  background: #1A0C06;
+}
+
+/* ── Typewriter cursor blink ────────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.cursor-blink { animation: blink 0.9s step-end infinite; }
+
+/* ── Phase label pulse ──────────────────────────────────────────────────── */
+@keyframes phasePulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+.phase-pulse { animation: phasePulse 1.4s ease-in-out infinite; }
+
+/* ── Warmth tint on inputs / range ─────────────────────────────────────── */
+input[type="range"] {
+  accent-color: var(--c-mocha);
 }

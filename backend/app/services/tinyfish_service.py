@@ -15,12 +15,37 @@ All functions:
 """
 import asyncio
 import json
-import os
 import time
+from datetime import datetime
 from typing import Optional
 import requests
 
 from app.core.config import get_settings
+
+# Always use the actual current year so search queries are not stale
+_CURRENT_YEAR = datetime.now().year
+_PREV_YEAR    = _CURRENT_YEAR - 1
+
+# TinyFish Search API only accepts ISO 2-letter country codes for `location`.
+# City/state strings return 0 results — geo-targeting must be done via query text.
+_SEARCH_COUNTRY = "US"
+
+# Per-agent browser automation budget (seconds). Lower = faster /api/analyze;
+# TinyFish may return partial/empty JSON under tight budgets — hotspot scores still usable.
+def _agent_timeout() -> int:
+    try:
+        t = int(get_settings().tinyfish_agent_timeout_seconds)
+        return max(10, min(t, 120))
+    except Exception:
+        return 22
+
+
+def _search_http_timeout() -> int:
+    try:
+        t = int(get_settings().tinyfish_search_http_timeout_seconds)
+        return max(5, min(t, 60))
+    except Exception:
+        return 12
 
 
 def _has_tinyfish_key() -> bool:
@@ -29,10 +54,16 @@ def _has_tinyfish_key() -> bool:
     return bool(key and key != "your_tinyfish_api_key_here" and len(key) > 10)
 
 
-def _search_sync(query: str, location: str = "US", num_results: int = 10) -> list[dict]:
+def _search_sync(query: str, num_results: int = 10) -> list[dict]:
     """
     Synchronous TinyFish Search API call.
-    Correct param is 'query' (not 'q'). Location is a 2-letter country code.
+
+    Important notes discovered from live testing:
+      - `location` ONLY accepts 2-letter ISO country codes (e.g. "US").
+        Passing a city name or state code returns 0 results.
+        → Geo-targeting must be embedded directly in the query string.
+      - `num` parameter is NOT supported; result count is fixed at 10 per call.
+      - Rate limit: ~5–10 req/min sustained (no hard throttling observed in tests).
     """
     if not _has_tinyfish_key():
         return []
@@ -42,12 +73,13 @@ def _search_sync(query: str, location: str = "US", num_results: int = 10) -> lis
         resp = requests.get(
             "https://api.search.tinyfish.ai",
             headers={"X-API-Key": settings.tinyfish_api_key},
-            params={"query": query, "location": location},
-            timeout=20,
+            params={"query": query, "location": _SEARCH_COUNTRY},
+            timeout=_search_http_timeout(),
         )
         if resp.status_code == 200:
             data = resp.json()
-            return data.get("results", [])
+            results = data.get("results", [])
+            return results[:num_results]
         else:
             print(f"[TinyFish Search] HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
@@ -55,13 +87,18 @@ def _search_sync(query: str, location: str = "US", num_results: int = 10) -> lis
     return []
 
 
-def _agent_sync(url: str, goal: str, timeout: int = 35) -> Optional[dict]:
+def _agent_sync(url: str, goal: str, timeout: Optional[int] = None) -> Optional[dict]:
     """
     Synchronous TinyFish Agent API call (SSE streaming, collected to completion).
-    Returns the result_json dict from the COMPLETE event.
+
+    Per-call wall time is capped by Settings.tinyfish_agent_timeout_seconds (default ~22s)
+    so /api/analyze stays responsive; incomplete runs return empty/partial JSON.
     """
     if not _has_tinyfish_key():
         return None
+
+    if timeout is None:
+        timeout = _agent_timeout()
 
     settings = get_settings()
     try:
@@ -73,11 +110,12 @@ def _agent_sync(url: str, goal: str, timeout: int = 35) -> Optional[dict]:
             },
             json={"url": url, "goal": goal},
             stream=True,
-            timeout=timeout,
+            timeout=timeout + 5,   # socket timeout slightly longer than SSE deadline
         )
         start = time.time()
         for line in resp.iter_lines():
             if time.time() - start > timeout:
+                print(f"[TinyFish Agent] Timed out after {timeout}s ({url[:60]})")
                 break
             if not line:
                 continue
@@ -85,11 +123,18 @@ def _agent_sync(url: str, goal: str, timeout: int = 35) -> Optional[dict]:
             if line_str.startswith("data: "):
                 try:
                     event = json.loads(line_str[6:])
-                    if event.get("type") == "COMPLETE":
+                    etype = event.get("type", "")
+                    if etype == "COMPLETE":
                         result = event.get("result")
                         if isinstance(result, str):
-                            return json.loads(result)
+                            try:
+                                return json.loads(result)
+                            except json.JSONDecodeError:
+                                pass
                         return result
+                    elif etype == "ERROR":
+                        print(f"[TinyFish Agent] ERROR event: {event.get('message','')[:120]}")
+                        return None
                 except Exception:
                     pass
     except Exception as e:
@@ -99,18 +144,15 @@ def _agent_sync(url: str, goal: str, timeout: int = 35) -> Optional[dict]:
 
 # ── Async wrappers (run synchronous calls in executor) ──────────────────────
 
-async def search_retail_signals(query: str, location: str = "US") -> list[dict]:
+async def search_retail_signals(query: str) -> list[dict]:
     """Async: search for live retail signals."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _search_sync, query, location, 10)
+    return await loop.run_in_executor(None, _search_sync, query, 10)
 
 
 async def scrape_yelp_new_businesses(city_state: str, category: str = "") -> list[dict]:
     """
     Scrape Yelp for recently opened businesses — demand validation signal.
-
-    Goal: Detect which businesses opened in the last 6 months in this area
-    and whether the area is showing retail momentum.
     """
     city_slug = city_state.replace(", ", "-").replace(" ", "-").lower()
     cat_param = f"find_desc={category}&" if category else ""
@@ -130,7 +172,7 @@ async def scrape_yelp_new_businesses(city_state: str, category: str = "") -> lis
     )
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _agent_sync, url, goal, 40)
+    result = await loop.run_in_executor(None, _agent_sync, url, goal, None)
     if isinstance(result, list):
         return result
     if isinstance(result, dict):
@@ -143,12 +185,10 @@ async def scrape_yelp_new_businesses(city_state: str, category: str = "") -> lis
 async def scrape_loopnet_listings(city_state: str, store_size: str = "large") -> dict:
     """
     Scrape Loopnet for available commercial real estate — development readiness signal.
-
-    Goal: How many retail spaces are available for lease? This tells us whether
-    landlords are ready for new tenants and whether the area is being built out.
     """
     city_slug = city_state.split(",")[0].strip().replace(" ", "-")
-    state = city_state.split(",")[-1].strip()[:2].upper() if "," in city_state else "AZ"
+    # Bug fixed: was defaulting to "AZ" — now derive state from city_state correctly
+    state = city_state.split(",")[-1].strip()[:2].upper() if "," in city_state else "MN"
     url = f"https://www.loopnet.com/search/commercial-real-estate/{city_slug}-{state}/for-lease/"
 
     goal = (
@@ -166,7 +206,7 @@ async def scrape_loopnet_listings(city_state: str, store_size: str = "large") ->
     )
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _agent_sync, url, goal, 40)
+    result = await loop.run_in_executor(None, _agent_sync, url, goal, None)
     if isinstance(result, dict):
         return result
     return {"count": 0, "anchor_ready_count": 0, "new_listings_90_days": 0, "listings": []}
@@ -178,23 +218,23 @@ async def search_news_signals(city_state: str, store_category: str = "retail") -
     (A) Hype/trending area signals — is this neighborhood becoming a retail destination?
     (B) New store opening announcements — what specific stores just opened or are coming?
 
-    Capped at 3 queries with inter-request delay to respect TinyFish 5 req/min limit.
+    Key fixes:
+      1. Year is now dynamic (_CURRENT_YEAR) — was hardcoded to 2025.
+      2. City name is embedded in the query (not the broken `location` city param).
+      3. Queries cover both current and previous year to catch late-year announcements.
     """
     city = city_state.split(",")[0].strip()
     loop = asyncio.get_event_loop()
     results = []
 
-    # 3 queries only (stays under 5/min alongside other TinyFish calls)
+    # Single merged query keeps /api/analyze latency predictable (was 3× search round-trips).
     queries = [
-        f'"{city}" "grand opening" OR "now open" OR "coming soon" {store_category} 2025',
-        f'"{city}" new {store_category} store opening announced 2025',
-        f'"{city}" "up and coming" OR "hottest" shopping retail 2025',
+        f'{city} ("grand opening" OR "now open" OR "coming soon") {store_category} '
+        f'{_CURRENT_YEAR} OR {_PREV_YEAR}',
     ]
 
-    for i, q in enumerate(queries):
-        if i > 0:
-            await asyncio.sleep(0.6)  # ~5 req/min = 1 per 12s; 0.6s min gap between bursts
-        batch = await loop.run_in_executor(None, _search_sync, q, "US", 5)
+    for q in queries:
+        batch = await loop.run_in_executor(None, _search_sync, q, 10)
         results.extend(batch)
 
     return results[:12]
@@ -203,21 +243,33 @@ async def search_news_signals(city_state: str, store_category: str = "retail") -
 async def scrape_city_permits(city_state: str) -> dict:
     """
     Scrape city building permit portal for recent commercial construction activity.
-
-    High permit activity = area is being developed = future retail demand forming.
     """
     city = city_state.split(",")[0].strip().lower().replace(" ", "")
-    state = city_state.split(",")[-1].strip().lower() if "," in city_state else "az"
+    state = city_state.split(",")[-1].strip().lower() if "," in city_state else "mn"
 
     KNOWN_PORTALS = {
-        "phoenix":    "https://www.phoenix.gov/pdd/permits/online-permit-center",
-        "gilbert":    "https://www.gilbertaz.gov/departments/development-services/permits",
-        "scottsdale": "https://www.scottsdaleaz.gov/permits",
-        "chandler":   "https://www.chandleraz.gov/residents/permits-and-licenses",
-        "peoria":     "https://peoriaaz.gov/421/Permits",
+        # Minneapolis Metro
+        "minneapolis":     "https://www.minneapolismn.gov/business-services/permits/",
+        "bloomington":     "https://www.bloomingtonmn.gov/departments/community-development/permits",
+        "eden prairie":    "https://www.edenprairie.org/departments/planning-zoning-building/building-permits",
+        "edenprairie":     "https://www.edenprairie.org/departments/planning-zoning-building/building-permits",
+        "plymouth":        "https://www.plymouthmn.gov/departments/community-development/building-permits",
+        "burnsville":      "https://www.burnsville.org/departments/community-development/building-division",
+        "brooklyn center": "https://www.ci.brooklyn-center.mn.us/departments/community-development",
+        "brooklyncenter":  "https://www.ci.brooklyn-center.mn.us/departments/community-development",
+        "coon rapids":     "https://www.coonrapidsmn.gov/departments/community-development",
+        "coonrapids":      "https://www.coonrapidsmn.gov/departments/community-development",
+        "richfield":       "https://www.cityofrichfield.org/departments/community_development",
+        "st. louis park":  "https://www.stlouispark.org/government/departments/inspections",
+        "stlouispark":     "https://www.stlouispark.org/government/departments/inspections",
     }
 
-    portal_url = KNOWN_PORTALS.get(city, f"https://www.{city}{state}.gov/permits")
+    # Fallback: use state to build a plausible URL
+    portal_url = KNOWN_PORTALS.get(
+        city,
+        KNOWN_PORTALS.get(city.replace(" ", ""),
+        f"https://www.{city}{state}.gov/permits")
+    )
 
     goal = (
         f"You are analyzing commercial building activity for {city_state}. "
@@ -233,7 +285,7 @@ async def scrape_city_permits(city_state: str) -> dict:
     )
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _agent_sync, portal_url, goal, 30)
+    result = await loop.run_in_executor(None, _agent_sync, portal_url, goal, None)
     if isinstance(result, dict) and "permit_count" in result:
         return result
     return {
@@ -245,10 +297,8 @@ async def scrape_city_permits(city_state: str) -> dict:
 
 async def scrape_new_store_openings(city_state: str, store_category: str, brand_name: str = "") -> dict:
     """
-    NEW: Dedicated new store opening intelligence scrape.
+    Dedicated new store opening intelligence scrape.
     Answers: 'What stores just opened nearby, and does that make this a good location for me?'
-
-    Uses the new_store_opening_intelligence schema.
     """
     city = city_state.split(",")[0].strip()
     category_context = f"specifically for {store_category} retailers" if store_category else "for retailers"
@@ -262,7 +312,7 @@ async def scrape_new_store_openings(city_state: str, store_category: str, brand_
         f""
         f"Find all stores that opened OR announced openings in {city_state} in the past 6 months. For each: "
         f"1. Name, category, and approximate location "
-        f"2. Is it a DEMAND VALIDATOR (proves consumers exist for this category)? e.g. Whole Foods opening = premium grocery demand. "
+        f"2. Is it a DEMAND VALIDATOR (proves consumers exist for this category)? "
         f"3. Is it a DIRECT COMPETITOR that makes the area less attractive? "
         f"4. Does it create useful CO-TENANCY (shoppers from that store will walk by yours)? "
         f"5. Estimate the NET VERDICT: given all openings, is this area now BETTER or WORSE for opening a {store_category} store? "
@@ -282,7 +332,7 @@ async def scrape_new_store_openings(city_state: str, store_category: str, brand_
     )
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _agent_sync, url, goal, 45)
+    result = await loop.run_in_executor(None, _agent_sync, url, goal, None)
     if isinstance(result, dict):
         return result
     return {

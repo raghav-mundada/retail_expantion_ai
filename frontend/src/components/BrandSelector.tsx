@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Search, Store } from "lucide-react";
+import { ArrowRight, Search, Store, LogIn } from "lucide-react";
 import { getKnownBrands, type RetailerProfile, type StoreSizeEnum, type PricePositioning } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 interface Props {
-  onSelect: (retailer: RetailerProfile, displayName: string) => void;
+  onSelect:  (retailer: RetailerProfile, displayName: string) => void;
+  onSignIn?: () => void;
 }
 
 const SIZE_LABELS: Record<string, string> = {
@@ -25,7 +27,8 @@ const POPULAR_BRANDS = [
   "Whole Foods", "Home Depot", "TJ Maxx", "Dollar General", "Sprouts",
 ];
 
-export function BrandSelector({ onSelect }: Props) {
+export function BrandSelector({ onSelect, onSignIn }: Props) {
+  const { user } = useAuth();
   const [mode, setMode] = useState<"brand" | "custom">("brand");
   const [query, setQuery] = useState("");
   const [brands, setBrands] = useState<any[]>([]);
@@ -87,6 +90,28 @@ export function BrandSelector({ onSelect }: Props) {
             Select a known brand or define your own store spec.
             We'll align demographic, competitive, and hotspot data to its DNA.
           </p>
+
+          {/* Sign-in CTA — only shown to anonymous users */}
+          {!user && onSignIn && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+              className="mt-6 flex items-center gap-4"
+            >
+              <button
+                onClick={onSignIn}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-ink text-snow text-sm font-medium
+                           hover:bg-graphite transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5" strokeWidth={2} />
+                Sign in / Log in
+              </button>
+              <span className="text-xs text-slate">
+                Save your analyses and access them across sessions.
+              </span>
+            </motion.div>
+          )}
         </div>
       </motion.div>
 

@@ -97,14 +97,14 @@ def get_tracts_in_radius(lat: float, lon: float, radius_km: float):
     bb = _bounding_box(lat, lon, radius_km)
 
     params = {
-        "where"          : "1=1",
         "geometry"       : f"{bb['min_lon']},{bb['min_lat']},{bb['max_lon']},{bb['max_lat']}",
         "geometryType"   : "esriGeometryEnvelope",
-        "spatialRel"     : "esriSpatialRelIntersects",
-        "outFields"      : "STATE,COUNTY,TRACT,CENTLAT,CENTLON,GEOID",
+        "inSR"           : "4326",
+        "outSR"          : "4326",
+        "outFields"      : "GEOID,STATE,COUNTY,TRACT,CENTLAT,CENTLON",
         "returnGeometry" : "false",
         "f"              : "json",
-        "resultRecordCount": 1000,
+        "resultRecordCount": 2000,
     }
 
     try:

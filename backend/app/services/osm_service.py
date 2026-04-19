@@ -3,16 +3,18 @@ OpenStreetMap / Overpass API Service
 ─────────────────────────────────────
 Fetches competitor retail store locations near a given lat/lng.
 
-Upgraded to use the robust multi-mirror overpass_client (ported from
-backend/pipeline/overpass_client.py on the main branch):
-  - 3 Overpass mirror URLs tried in sequence
-  - Exponential backoff on 429/503/504
-  - Results cached in Supabase KV (replaces local file cache)
+Primary source: Geoapify Places API (fast, global, structured JSON).
+Fallback: Overpass/OSM multi-mirror client with exponential backoff.
+
+Geoapify is preferred because Overpass queries can take 30–90 s when
+mirrors are under load — Geoapify returns in < 3 s with an API key.
 """
 import math
 import logging
+import time
 import requests
 from app.models.schemas import CompetitorStore, CompetitorProfile
+from app.core.config import get_settings
 from app.services import overpass_client
 from app.services.supabase_service import cache_get, cache_set
 
@@ -85,12 +87,67 @@ def _osm_cache_key(lat: float, lng: float, radius_miles: float) -> str:
     return f"osm:{lat:.3f},{lng:.3f},{radius_miles:.0f}"
 
 
+def _fetch_via_geoapify(lat: float, lng: float, radius_miles: float) -> list[dict] | None:
+    """
+    Fetch competitor stores via Geoapify Places API.
+    Returns a list of store dicts, or None if key is absent / call fails.
+    Mirrors the approach in backend/pipeline/fetch_all.py (main branch).
+    """
+    settings = get_settings()
+    api_key = settings.geoapify_api_key
+    if not api_key:
+        return None
+
+    radius_m = int(radius_miles * 1609.34)
+    # Supermarkets + department stores cover the big-box retail universe
+    categories = "commercial.supermarket,commercial.department_store,commercial.shopping_mall"
+    url = "https://api.geoapify.com/v2/places"
+    params = {
+        "categories": categories,
+        "filter": f"circle:{lng},{lat},{radius_m}",
+        "limit": 500,
+        "apiKey": api_key,
+    }
+
+    delays = [2, 5]
+    for attempt in range(3):
+        try:
+            r = requests.get(url, params=params, timeout=20)
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(delays[attempt])
+                continue
+            r.raise_for_status()
+            features = r.json().get("features", [])
+            stores = []
+            for f in features:
+                props = f.get("properties", {})
+                geom = f.get("geometry", {}).get("coordinates", [None, None])
+                flng, flat = geom[0], geom[1]
+                if flat is None or flng is None:
+                    continue
+                name = props.get("name") or "Unknown"
+                stores.append({
+                    "name":      name,
+                    "brand":     _normalize_brand(name),
+                    "lat":       flat,
+                    "lng":       flng,
+                    "osm_id":    props.get("place_id", ""),
+                    "shop_type": (props.get("categories") or ["retail"])[-1].split(".")[-1],
+                })
+            log.info(f"[OSMService/Geoapify] Found {len(stores)} stores at ({lat:.3f},{lng:.3f})")
+            return stores
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(delays[attempt])
+            else:
+                log.warning(f"[OSMService/Geoapify] Failed after 3 attempts: {e}")
+    return None
+
+
 def fetch_competitors(lat: float, lng: float, radius_miles: float = 10.0) -> list[dict]:
     """
-    Query Overpass API for competitor stores.
-
-    Results cached in Supabase KV (replaces old local file cache).
-    Uses robust multi-mirror overpass_client with exponential backoff.
+    Query for competitor stores. Tries Geoapify first (fast), then Overpass (fallback).
+    Results cached in Supabase KV.
     """
     cache_key = _osm_cache_key(lat, lng, radius_miles)
     cached = cache_get(cache_key)
@@ -98,40 +155,43 @@ def fetch_competitors(lat: float, lng: float, radius_miles: float = 10.0) -> lis
         log.info(f"[OSMService] Cache hit: {len(cached)} stores at ({lat:.3f},{lng:.3f})")
         return cached
 
-    radius_m = radius_miles * 1609.34
-    ql = _build_overpass_query(lat, lng, radius_m)
+    # ── Primary: Geoapify Places API ─────────────────────────────────────────
+    stores = _fetch_via_geoapify(lat, lng, radius_miles)
 
-    elements = overpass_client.query(ql, timeout_s=30)
-
-    if not elements:
-        log.warning("[OSMService] Overpass returned no elements — using fallback data")
-        return _get_fallback_competitors(lat, lng)
-
-    stores = []
-    for el in elements:
-        tags = el.get("tags", {})
-        name = tags.get("name", "Unknown")
-        if el.get("type") == "node":
-            elat, elng = el.get("lat", 0), el.get("lon", 0)
+    # ── Fallback: Overpass/OSM ────────────────────────────────────────────────
+    if stores is None:
+        log.info("[OSMService] Geoapify unavailable — trying Overpass")
+        radius_m = radius_miles * 1609.34
+        ql = _build_overpass_query(lat, lng, radius_m)
+        elements = overpass_client.query(ql, timeout_s=30)
+        if elements:
+            stores = []
+            for el in elements:
+                tags = el.get("tags", {})
+                name = tags.get("name", "Unknown")
+                if el.get("type") == "node":
+                    elat, elng = el.get("lat", 0), el.get("lon", 0)
+                else:
+                    center = el.get("center", {})
+                    elat, elng = center.get("lat", 0), center.get("lon", 0)
+                if not elat or not elng:
+                    continue
+                stores.append({
+                    "name":      name,
+                    "brand":     _normalize_brand(name),
+                    "lat":       elat,
+                    "lng":       elng,
+                    "osm_id":    str(el.get("id", "")),
+                    "shop_type": tags.get("shop", "retail"),
+                })
         else:
-            center = el.get("center", {})
-            elat, elng = center.get("lat", 0), center.get("lon", 0)
-        if not elat or not elng:
-            continue
-        stores.append({
-            "name":      name,
-            "brand":     _normalize_brand(name),
-            "lat":       elat,
-            "lng":       elng,
-            "osm_id":    str(el.get("id", "")),
-            "shop_type": tags.get("shop", "retail"),
-        })
+            log.warning("[OSMService] Overpass also returned no results — using fallback data")
+            stores = _get_fallback_competitors(lat, lng)
 
-    # Cache successful results in Supabase KV
     if stores:
         cache_set(cache_key, stores)
 
-    log.info(f"[OSMService] Found {len(stores)} competitor stores")
+    log.info(f"[OSMService] Returning {len(stores)} competitor stores")
     return stores
 
 

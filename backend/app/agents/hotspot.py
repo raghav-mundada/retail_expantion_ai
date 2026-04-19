@@ -12,7 +12,6 @@ Output: HotspotProfile with hotspot_score (0–100) and ranked RetailSignal list
 """
 import asyncio
 import math
-from datetime import datetime
 from typing import AsyncGenerator
 
 from app.models.schemas import HotspotProfile, RetailSignal
@@ -25,8 +24,6 @@ from app.services.tinyfish_service import (
     _has_tinyfish_key,
 )
 from app.core.config import get_settings
-
-settings = get_settings()
 
 # Weights for composite hotspot score
 _WEIGHTS = {
@@ -158,7 +155,7 @@ def _fallback_hotspot(lat: float, lng: float, store_category: str) -> HotspotPro
 async def run_hotspot_agent(
     lat: float,
     lng: float,
-    region_city: str = "Phoenix, AZ",
+    region_city: str = "Minneapolis, MN",
     store_category: str = "retail",
 ) -> AsyncGenerator[dict, None]:
     """
@@ -190,35 +187,86 @@ async def run_hotspot_agent(
     yield {"agent": "hotspot", "status": "running",
            "message": "🕷️ TinyFish: searching hype signals, new store openings, Yelp + permits in parallel..."}
 
-    # Run all TinyFish calls in parallel (5 concurrent)
+    # Run all TinyFish calls in parallel — hard wall-clock cap so /api/analyze stays responsive.
     news_task      = asyncio.create_task(search_news_signals(region_city, store_category))
     yelp_task      = asyncio.create_task(scrape_yelp_new_businesses(region_city, store_category))
     loopnet_task   = asyncio.create_task(scrape_loopnet_listings(region_city))
     permit_task    = asyncio.create_task(scrape_city_permits(region_city))
     opening_task   = asyncio.create_task(scrape_new_store_openings(region_city, store_category))
 
-    news_results = await news_task
+    budget = float(get_settings().analysis_hotspot_total_budget_seconds)
+    budget = max(18.0, min(budget, 120.0))
+
+    def _norm_list(x, default=None):
+        if default is None:
+            default = []
+        return x if isinstance(x, list) else default
+
+    def _norm_dict(x, default=None):
+        if default is None:
+            default = {}
+        return x if isinstance(x, dict) else default
+
+    try:
+        raw = await asyncio.wait_for(
+            asyncio.gather(
+                news_task, yelp_task, loopnet_task, permit_task, opening_task,
+                return_exceptions=True,
+            ),
+            timeout=budget,
+        )
+        news_results, yelp_businesses, loopnet_data, permit_data, opening_intel = raw
+        if isinstance(news_results, Exception):
+            print(f"[Hotspot] news task failed: {news_results}")
+            news_results = []
+        if isinstance(yelp_businesses, Exception):
+            print(f"[Hotspot] yelp task failed: {yelp_businesses}")
+            yelp_businesses = []
+        if isinstance(loopnet_data, Exception):
+            print(f"[Hotspot] loopnet task failed: {loopnet_data}")
+            loopnet_data = {"count": 0, "anchor_ready_count": 0}
+        if isinstance(permit_data, Exception):
+            print(f"[Hotspot] permit task failed: {permit_data}")
+            permit_data = {"recent_commercial": 0, "tenant_improvement_count": 0, "development_activity_level": "unknown"}
+        if isinstance(opening_intel, Exception):
+            print(f"[Hotspot] opening_intel task failed: {opening_intel}")
+            opening_intel = {"site_verdict": "neutral", "net_new_stores": 0, "whitespace_categories": []}
+        news_results = _norm_list(news_results)
+        yelp_businesses = _norm_list(yelp_businesses)
+        loopnet_data = _norm_dict(loopnet_data)
+        permit_data = _norm_dict(permit_data)
+        opening_intel = _norm_dict(opening_intel)
+    except asyncio.TimeoutError:
+        print(f"[Hotspot] TinyFish gather exceeded {budget:.0f}s — using fast proxy scoring")
+        for t in (news_task, yelp_task, loopnet_task, permit_task, opening_task):
+            if not t.done():
+                t.cancel()
+        hotspot = _fallback_hotspot(lat, lng, store_category)
+        yield {
+            "agent": "hotspot",
+            "status": "done",
+            "message": f"📊 Hotspot score: {hotspot.hotspot_score:.0f}/100 (time budget — proxy mode)",
+            "data": hotspot.model_dump(),
+        }
+        return
+
     yield {"agent": "hotspot", "status": "running",
            "message": f"📰 News/hype signals: {len(news_results)} results (area trending + opening announcements)"}
 
-    yelp_businesses = await yelp_task
     yield {"agent": "hotspot", "status": "running",
            "message": f"⭐ Yelp: {len(yelp_businesses)} recently active businesses detected"}
 
-    loopnet_data = await loopnet_task
     loopnet_count = loopnet_data.get("count", 0)
-    anchor_ready  = loopnet_data.get("anchor_ready_count", 0)
+    anchor_ready = loopnet_data.get("anchor_ready_count", 0)
     yield {"agent": "hotspot", "status": "running",
            "message": f"🏢 Loopnet: {loopnet_count} available spaces ({anchor_ready} anchor-ready)"}
 
-    permit_data = await permit_task
     permit_count = permit_data.get("recent_commercial", 0)
-    dev_level    = permit_data.get("development_activity_level", "unknown")
+    dev_level = permit_data.get("development_activity_level", "unknown")
     yield {"agent": "hotspot", "status": "running",
            "message": f"📋 Permit activity: {permit_count} commercial permits — {dev_level} development"}
 
-    opening_intel = await opening_task
-    site_verdict  = opening_intel.get("site_verdict", "neutral")
+    site_verdict = opening_intel.get("site_verdict", "neutral")
     net_new       = opening_intel.get("net_new_stores", 0)
     whitespace    = opening_intel.get("whitespace_categories", [])
     yield {"agent": "hotspot", "status": "running",

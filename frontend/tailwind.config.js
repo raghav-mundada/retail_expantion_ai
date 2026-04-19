@@ -10,27 +10,33 @@ export default {
         mono: ['"Geist Mono"', "ui-monospace", "monospace"],
       },
       colors: {
-        // Premium light palette — like a private equity research report
-        ink:       "#0A0A0A",      // primary text
-        graphite:  "#3F3F46",      // secondary text
-        slate:     "#71717A",      // tertiary
-        mist:      "#A1A1AA",      // muted
-        hairline:  "#E4E4E7",      // dividers
-        bone:      "#F5F5F4",      // surface tint
-        paper:     "#FAFAF9",      // page background
-        snow:      "#FFFFFF",      // pure card
+        // Warm parchment palette — premium editorial, like a well-aged research report
+        ink:       "#2C1810",      // deep espresso — primary text
+        graphite:  "#5C3D1E",      // warm brown — secondary text
+        slate:     "#8B6F4E",      // warm taupe — tertiary
+        mist:      "#B8956A",      // warm tan — muted
+        hairline:  "#D4BFA0",      // warm beige — dividers
+        bone:      "#EDE0D4",      // warm bone — surface tint
+        paper:     "#F5EFE6",      // parchment — page background
+        snow:      "#FBF7F2",      // warm white — cards
 
-        // Single jewel accent + status
-        emerald:   "#047857",      // GO / positive
+        // Warm accent system
+        warm:      "#C8A882",      // mid-tone warm — interactive surfaces
+        mocha:     "#A07850",      // deeper warm — hover accents
+        sienna:    "#5C3D1E",      // espresso — deep accent
+        caramel:   "#C8A882",      // alias for warm
+
+        // Functional / status (kept intentional)
+        emerald:   "#2D6A4F",      // GO / positive (warmer green)
         amber:     "#B45309",      // CAUTION
         crimson:   "#B91C1C",      // STOP / risk
 
-        // Subtle data viz hues (muted, editorial)
+        // Data viz (warm tones)
         chart: {
-          1: "#0F766E",
-          2: "#7C2D12",
-          3: "#1E40AF",
-          4: "#86198F",
+          1: "#5C8A5A",
+          2: "#7C4A1E",
+          3: "#3B6EA8",
+          4: "#7B4F8E",
           5: "#B45309",
         },
       },
@@ -39,9 +45,12 @@ export default {
         snug: "-0.02em",
       },
       animation: {
-        "fade-up":   "fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "fade-in":   "fadeIn 0.4s ease-out forwards",
-        "ping-slow": "ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite",
+        "fade-up":    "fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "fade-in":    "fadeIn 0.4s ease-out forwards",
+        "ping-slow":  "ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite",
+        "shimmer":    "shimmer 1.8s ease-in-out infinite",
+        "count-up":   "fadeUp 0.4s cubic-bezier(0.16,1,0.3,1) forwards",
+        "glow-pulse": "glowPulse 2s ease-in-out infinite",
       },
       keyframes: {
         fadeUp: {
@@ -51,6 +60,14 @@ export default {
         fadeIn: {
           "0%": { opacity: 0 },
           "100%": { opacity: 1 },
+        },
+        shimmer: {
+          "0%":   { backgroundPosition: "-200% center" },
+          "100%": { backgroundPosition: "200% center" },
+        },
+        glowPulse: {
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(200,168,130,0)" },
+          "50%":       { boxShadow: "0 0 20px 4px rgba(200,168,130,0.18)" },
         },
       },
     },

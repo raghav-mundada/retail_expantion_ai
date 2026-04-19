@@ -7,9 +7,7 @@ import asyncio
 import json
 import warnings
 from typing import Optional
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore", FutureWarning)
-    import google.generativeai as genai
+from openai import OpenAI
 
 from app.models.schemas import DemographicsProfile, CompetitorProfile, BrandFitProfile, BrandDNA
 from app.core.config import get_settings
@@ -87,32 +85,34 @@ def _recommended_format(brand_dna: BrandDNA, demographics: DemographicsProfile) 
     return f"{brand_dna.display_name} — {fmt}{extra} ({sqft:,} sq ft typical). {size_note}."
 
 
+def _brand_fit_narrative_fallback(
+    brand_dna: BrandDNA,
+    fit_score: float,
+    demographics: DemographicsProfile,
+    income_align: float,
+) -> str:
+    level = "strong" if fit_score >= 70 else "moderate" if fit_score >= 50 else "weak"
+    return (
+        f"{brand_dna.display_name} shows {level} fit for this location (score: {fit_score:.0f}/100). "
+        f"The area's ${demographics.median_income:,.0f} median household income "
+        f"{'falls within' if income_align > 75 else 'deviates from'} "
+        f"the {brand_dna.price_positioning} retail sweet spot. "
+        f"{demographics.family_households_pct:.0f}% family households "
+        f"{'aligns well' if brand_dna.family_skew else 'is a secondary factor'} for this format."
+    )
+
+
 async def _generate_brand_narrative(
     brand_dna: BrandDNA,
     fit_score: float,
     demographics: DemographicsProfile,
     income_align: float,
 ) -> str:
-    """Use Gemini to generate a 2–3 sentence brand fit explanation for any retailer."""
+    """Use OpenAI to generate a 2–3 sentence brand fit explanation for any retailer."""
     settings = get_settings()
 
-    # Fallback narrative (no Gemini)
-    def _fallback() -> str:
-        level = "strong" if fit_score >= 70 else "moderate" if fit_score >= 50 else "weak"
-        return (
-            f"{brand_dna.display_name} shows {level} fit for this location (score: {fit_score:.0f}/100). "
-            f"The area's ${demographics.median_income:,.0f} median household income "
-            f"{'falls within' if income_align > 75 else 'deviates from'} "
-            f"the {brand_dna.price_positioning} retail sweet spot. "
-            f"{demographics.family_households_pct:.0f}% family households "
-            f"{'aligns well' if brand_dna.family_skew else 'is a secondary factor'} for this format."
-        )
-
-    if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
-        return _fallback()
-
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    if not settings.openai_api_key or settings.openai_api_key == "your_openai_api_key_here":
+        return _brand_fit_narrative_fallback(brand_dna, fit_score, demographics, income_align)
 
     prompt = f"""Write exactly 2-3 sentences explaining how well {brand_dna.display_name} fits this location.
 
@@ -128,13 +128,20 @@ Location demographics:
 
 Be direct, specific, business-focused. Reference actual demographic signals. No filler sentences."""
 
-    try:
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: model.generate_content(prompt)
+    def _call() -> str:
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.4,
         )
-        return response.text.strip()
+        return resp.choices[0].message.content.strip()
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _call)
     except Exception:
-        return _fallback()
+        return _brand_fit_narrative_fallback(brand_dna, fit_score, demographics, income_align)
 
 
 async def run_brand_fit_agent(
@@ -192,7 +199,16 @@ async def run_brand_fit_agent(
     }
     await asyncio.sleep(0.3)
 
-    narrative = await _generate_brand_narrative(brand_dna, fit_score, demographics, income_align)
+    budget = float(get_settings().analysis_brand_narrative_timeout_seconds)
+    budget = max(4.0, min(budget, 60.0))
+    try:
+        narrative = await asyncio.wait_for(
+            _generate_brand_narrative(brand_dna, fit_score, demographics, income_align),
+            timeout=budget,
+        )
+    except asyncio.TimeoutError:
+        print(f"[BrandFit] narrative OpenAI exceeded {budget:.0f}s — using template")
+        narrative = _brand_fit_narrative_fallback(brand_dna, fit_score, demographics, income_align)
 
     brand_profile = BrandFitProfile(
         brand=display,

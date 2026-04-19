@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   ArrowUpRight, Sparkles, MapPin, Building2, Users, TrendingUp,
-  Flame, AlertTriangle, CheckCircle,
+  Flame, AlertTriangle, CheckCircle, Play, Cpu,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Circle, CircleMarker, Tooltip as LeafletTooltip } from "react-leaflet";
 import L from "leaflet";
@@ -19,20 +19,21 @@ interface Props {
   lon: number;
   radius_km: number;
   onAskOracle: () => void;
+  onRunSimulation: () => void;
 }
 
 function scoreColor(score: number): string {
-  if (score >= 75) return "#047857";
-  if (score >= 55) return "#0369a1";
-  if (score >= 40) return "#b45309";
-  return "#be123c";
+  if (score >= 75) return "#2D6A4F";
+  if (score >= 55) return "#5C8A5A";
+  if (score >= 40) return "#B45309";
+  return "#B91C1C";
 }
 
 function scoreBg(score: number): string {
-  if (score >= 75) return "#ecfdf5";
-  if (score >= 55) return "#eff6ff";
-  if (score >= 40) return "#fffbeb";
-  return "#fff1f2";
+  if (score >= 75) return "#EBF5EE";
+  if (score >= 55) return "#EFF5EE";
+  if (score >= 40) return "#FBF3E6";
+  return "#FBE9E9";
 }
 
 function buildRevenueForecast(annualRevenue: number) {
@@ -45,7 +46,7 @@ function buildRevenueForecast(annualRevenue: number) {
   }));
 }
 
-export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
+export function Dashboard({ result, lat, lon, radius_km, onAskOracle, onRunSimulation }: Props) {
   const { demographics, competitors, neighborhood, hotspot, amenity, simulation, brand_fit, score } = result;
   const forecastData = buildRevenueForecast(simulation.predicted_annual_revenue_usd);
 
@@ -81,11 +82,43 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
               Scored <strong>{score.total_score.toFixed(0)}/100</strong> — {score.rank_label}
             </p>
           </div>
-          <div className="col-span-12 lg:col-span-5 flex lg:justify-end">
+          <div className="col-span-12 lg:col-span-5 flex lg:justify-end gap-3 flex-wrap">
+            {/* Run AI Simulation CTA */}
+            <button
+              onClick={onRunSimulation}
+              className="group relative flex items-center gap-3 px-7 py-5 select-none"
+              style={{
+                background:    'linear-gradient(135deg, #5C3D1E 0%, #A07850 50%, #C8A882 100%)',
+                backgroundSize:'200% auto',
+                border:        '1px solid rgba(200,168,130,0.35)',
+                color:         '#FBF7F2',
+                transition:    'all 180ms cubic-bezier(0.25,0.46,0.45,0.94)',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundPosition = 'right center';
+                (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 28px rgba(160,120,80,0.3)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundPosition = 'left center';
+                (e.currentTarget as HTMLButtonElement).style.transform = 'none';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
+              }}
+              onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.97)'; }}
+              onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)'; }}
+            >
+              <Cpu className="w-4 h-4" strokeWidth={1.5} />
+              <div className="text-left">
+                <div className="text-sm font-medium">Run AI Simulation</div>
+                <div className="text-[10px] uppercase tracking-widest opacity-70 mt-0.5 font-mono">220 AGENTS · 5 PHASES</div>
+              </div>
+              <Play className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" strokeWidth={2} />
+            </button>
+
+            {/* Oracle debate */}
             <button
               onClick={onAskOracle}
-              className="group relative bg-ink text-snow px-7 py-5 flex items-center gap-3
-                         hover:bg-graphite transition-colors"
+              className="group relative btn-primary px-7 py-5 flex items-center gap-3"
             >
               <Sparkles className="w-4 h-4" strokeWidth={1.5} />
               <div className="text-left">
@@ -101,7 +134,12 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
       <div className="px-6 lg:px-10 py-10 max-w-[1500px] mx-auto space-y-6">
 
         {/* ══ ROW 1 — KPI Strip ══ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 hairline">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          className="grid grid-cols-2 lg:grid-cols-4 gap-0 hairline"
+        >
           <Kpi
             icon={<Users className="w-3.5 h-3.5" strokeWidth={1.5} />}
             label="TRADE AREA POPULATION"
@@ -121,6 +159,8 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
             value={fmtUSD(simulation.predicted_annual_revenue_usd)}
             sub={`${fmtUSD(simulation.confidence_interval_low)}–${fmtUSD(simulation.confidence_interval_high)} CI`}
             border
+            accent
+            onSimulate={onRunSimulation}
           />
           <Kpi
             icon={<MapPin className="w-3.5 h-3.5" strokeWidth={1.5} />}
@@ -129,7 +169,7 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
             sub={`${(simulation.pct_will_visit * 100).toFixed(1)}% of trade area`}
             border
           />
-        </div>
+        </motion.div>
 
         {/* ══ ROW 2 — Score Badge + Dimension Bars ══ */}
         <div className="grid grid-cols-12 gap-6">
@@ -226,6 +266,49 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
         {/* ══ ROW 3 — Revenue Forecast + Simulation KPIs ══ */}
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 lg:col-span-8 card p-6">
+            {/* Simulation CTA banner */}
+            <div
+              className="flex items-center justify-between mb-6 p-4 cursor-pointer group"
+              style={{
+                background:    'linear-gradient(135deg, rgba(92,61,30,0.08), rgba(200,168,130,0.12))',
+                border:        '1px solid rgba(200,168,130,0.25)',
+                transition:    'all 200ms ease',
+              }}
+              onClick={onRunSimulation}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(92,61,30,0.14), rgba(200,168,130,0.20))';
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(200,168,130,0.5)';
+                (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 20px rgba(160,120,80,0.15)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(92,61,30,0.08), rgba(200,168,130,0.12))';
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(200,168,130,0.25)';
+                (e.currentTarget as HTMLDivElement).style.transform = 'none';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div style={{ width: 36, height: 36, borderRadius: 4, background: 'rgba(200,168,130,0.15)', border: '1px solid rgba(200,168,130,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Cpu size={16} style={{ color: '#C8A882' }} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-ink">Run AI Simulation</div>
+                  <div className="text-xs text-slate">220 household agents · 5 phases · live Monte Carlo</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {['INIT','RAND','SCORE','CLUST','OUT'].map((l, i) => (
+                    <span key={i} className="text-[9px] px-1.5 py-0.5 font-mono uppercase" style={{ background: 'rgba(200,168,130,0.12)', border: '1px solid rgba(200,168,130,0.2)', color: 'rgba(200,168,130,0.7)' }}>
+                      {l}
+                    </span>
+                  ))}
+                </div>
+                <Play size={14} style={{ color: '#C8A882', marginLeft: 6 }} strokeWidth={2} className="group-hover:scale-110 transition-transform" />
+              </div>
+            </div>
+
             <SectionHead
               eyebrow="REVENUE SIMULATION"
               title="24-month ramp forecast"
@@ -272,7 +355,7 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
               title="Key metrics"
               caption="Household agent model · word-of-mouth spread"
             />
-            <div className="space-y-3">
+            <div>
               {[
                 { label: "Annual Revenue",     value: fmtUSD(simulation.predicted_annual_revenue_usd), highlight: true },
                 { label: "Confidence Low",     value: fmtUSD(simulation.confidence_interval_low) },
@@ -285,11 +368,11 @@ export function Dashboard({ result, lat, lon, radius_km, onAskOracle }: Props) {
                 { label: "Cannibalization",    value: `${simulation.cannibalization_risk.toFixed(1)}%`,
                   warn: simulation.cannibalization_risk > 50 },
               ].map((item: any) => (
-                <div key={item.label} className="flex items-baseline justify-between hairline-b pb-2 last:border-0">
+                <div key={item.label} className="data-row flex items-baseline justify-between hairline-b py-2 px-1 last:border-0">
                   <span className="label-xs">{item.label}</span>
                   <span className={`font-mono text-sm tabular ${
                     item.highlight ? "text-ink font-medium" :
-                    item.warn ? "text-red-600" : "text-graphite"
+                    item.warn ? "text-crimson" : "text-graphite"
                   }`}>{item.value}</span>
                 </div>
               ))}
@@ -650,12 +733,29 @@ function SectionHead({ eyebrow, title, caption, noMargin }: any) {
   );
 }
 
-function Kpi({ icon, label, value, sub, border }: any) {
+function Kpi({ icon, label, value, sub, border, accent, onSimulate }: any) {
   return (
-    <div className={`p-6 bg-snow ${border ? "border-l border-hairline" : ""}`}>
+    <div
+      className={`p-6 bg-snow transition-all duration-200 ${border ? "border-l border-hairline" : ""} ${accent ? "cursor-pointer group" : ""}`}
+      style={accent ? { position: 'relative' } : undefined}
+      onClick={accent && onSimulate ? onSimulate : undefined}
+      onMouseEnter={accent ? (e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(200,168,130,0.06)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(160,120,80,0.12)';
+      } : undefined}
+      onMouseLeave={accent ? (e) => {
+        (e.currentTarget as HTMLDivElement).style.background = '';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '';
+      } : undefined}
+    >
       <div className="flex items-center gap-2 mb-4 text-graphite">
         {icon}
         <span className="label-xs">{label}</span>
+        {accent && (
+          <span className="ml-auto label-xs text-mocha opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+            <Play size={8} strokeWidth={2} />simulate
+          </span>
+        )}
       </div>
       <div className="font-display text-4xl tabular leading-none mb-2">{value}</div>
       <div className="text-xs text-slate">{sub}</div>
@@ -666,7 +766,7 @@ function Kpi({ icon, label, value, sub, border }: any) {
 function SpatialMap({ lat, lon, radius_km, competitors }: any) {
   const pinIcon = L.divIcon({
     className: "",
-    html: `<div style="width:18px;height:18px;background:#047857;border:3px solid white;border-radius:9999px;box-shadow:0 0 0 1.5px #047857,0 8px 18px rgba(0,0,0,0.25)"></div>`,
+    html: `<div style="width:18px;height:18px;background:#2D6A4F;border:3px solid #FBF7F2;border-radius:9999px;box-shadow:0 0 0 1.5px #2D6A4F,0 8px 18px rgba(0,0,0,0.22)"></div>`,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
   });
@@ -692,7 +792,7 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
         <Circle
           center={[lat, lon]}
           radius={radius_km * 1000}
-          pathOptions={{ color: "#047857", weight: 1.5, fillColor: "#047857", fillOpacity: 0.05 }}
+          pathOptions={{ color: "#2D6A4F", weight: 1.5, fillColor: "#2D6A4F", fillOpacity: 0.05 }}
         />
         <Marker position={[lat, lon]} icon={pinIcon}>
           <LeafletTooltip direction="top" offset={[0, -10]} opacity={1} className="atlas-tooltip">
@@ -705,10 +805,10 @@ function SpatialMap({ lat, lon, radius_km, competitors }: any) {
             key={`c-${i}`}
             center={[c.lat, c.lng]}
             radius={5}
-            pathOptions={{ color: "#0A0A0A", weight: 1.5, fillColor: "#0A0A0A", fillOpacity: 0.85 }}
+            pathOptions={{ color: "#2C1810", weight: 1.5, fillColor: "#5C3D1E", fillOpacity: 0.8 }}
             eventHandlers={{
-              mouseover: (e) => e.target.setStyle({ radius: 8, fillOpacity: 1, color: "#047857" }),
-              mouseout:  (e) => e.target.setStyle({ radius: 5, fillOpacity: 0.85, color: "#0A0A0A" }),
+              mouseover: (e) => e.target.setStyle({ radius: 8, fillOpacity: 1, color: "#A07850" }),
+              mouseout:  (e) => e.target.setStyle({ radius: 5, fillOpacity: 0.8, color: "#2C1810" }),
             }}
           >
             <LeafletTooltip direction="top" offset={[0, -6]} className="atlas-tooltip">

@@ -14,23 +14,23 @@ import hashlib
 from app.models.schemas import NeighborhoodProfile
 
 
-# Phoenix-area school district quality index (NCES/GreatSchools approximation)
-PHOENIX_SCHOOL_DISTRICTS = [
-    {"name": "Scottsdale Unified",      "lat": 33.6391, "lng": -111.9275, "quality": 88},
-    {"name": "Paradise Valley Unified", "lat": 33.6654, "lng": -112.0220, "quality": 84},
-    {"name": "Gilbert Unified",         "lat": 33.3528, "lng": -111.7890, "quality": 82},
-    {"name": "Chandler Unified",        "lat": 33.3062, "lng": -111.8413, "quality": 80},
-    {"name": "Deer Valley Unified",     "lat": 33.7015, "lng": -112.1045, "quality": 78},
-    {"name": "Litchfield Elementary",   "lat": 33.5012, "lng": -112.3498, "quality": 76},
-    {"name": "Peoria Unified",          "lat": 33.5806, "lng": -112.2174, "quality": 74},
-    {"name": "Glendale Union",          "lat": 33.5389, "lng": -112.1859, "quality": 72},
-    {"name": "Mesa Unified",            "lat": 33.4152, "lng": -111.8315, "quality": 70},
-    {"name": "Tempe Union",             "lat": 33.3784, "lng": -111.9274, "quality": 74},
-    {"name": "Queen Creek Unified",     "lat": 33.2487, "lng": -111.6341, "quality": 78},
-    {"name": "Avondale Elementary",     "lat": 33.4355, "lng": -112.3496, "quality": 65},
-    {"name": "Roosevelt Elementary",    "lat": 33.4031, "lng": -112.0532, "quality": 58},
-    {"name": "Cartwright Elementary",   "lat": 33.4709, "lng": -112.1742, "quality": 55},
-    {"name": "Isaac Elementary",        "lat": 33.4752, "lng": -112.1117, "quality": 52},
+# Minneapolis Metro school district quality index (NCES/GreatSchools approximation)
+MINNEAPOLIS_SCHOOL_DISTRICTS = [
+    {"name": "Edina Public Schools",          "lat": 44.8897, "lng": -93.3499, "quality": 91},
+    {"name": "Wayzata Public Schools",        "lat": 44.9749, "lng": -93.5063, "quality": 89},
+    {"name": "Eden Prairie Schools",          "lat": 44.8547, "lng": -93.4708, "quality": 88},
+    {"name": "Minnetonka Public Schools",     "lat": 44.9211, "lng": -93.4687, "quality": 87},
+    {"name": "Mounds View Schools",           "lat": 45.1122, "lng": -93.2122, "quality": 85},
+    {"name": "Stillwater Area Public Schools","lat": 45.0563, "lng": -92.8244, "quality": 83},
+    {"name": "Rosemount-Apple Valley-Eagan",  "lat": 44.7374, "lng": -93.1564, "quality": 82},
+    {"name": "Prior Lake-Savage Schools",     "lat": 44.7136, "lng": -93.4220, "quality": 80},
+    {"name": "White Bear Lake Schools",       "lat": 45.0838, "lng": -93.0100, "quality": 78},
+    {"name": "Burnsville-Eagan-Savage",       "lat": 44.7677, "lng": -93.2777, "quality": 76},
+    {"name": "Bloomington Public Schools",    "lat": 44.8408, "lng": -93.3376, "quality": 74},
+    {"name": "Richfield Public Schools",      "lat": 44.8763, "lng": -93.2839, "quality": 70},
+    {"name": "Hopkins Public Schools",        "lat": 44.9261, "lng": -93.4051, "quality": 72},
+    {"name": "Minneapolis Public Schools",    "lat": 44.9778, "lng": -93.2650, "quality": 62},
+    {"name": "Brooklyn Center Schools",       "lat": 45.0720, "lng": -93.3317, "quality": 55},
 ]
 
 
@@ -50,7 +50,7 @@ def _lat_lng_proxy(lat: float, lng: float, offset: int, lo: float, hi: float) ->
 
 def get_nearest_school_district(lat: float, lng: float):
     nearest = min(
-        PHOENIX_SCHOOL_DISTRICTS,
+        MINNEAPOLIS_SCHOOL_DISTRICTS,
         key=lambda d: _haversine_miles(lat, lng, d["lat"], d["lng"])
     )
     dist = _haversine_miles(lat, lng, nearest["lat"], nearest["lng"])
@@ -83,8 +83,8 @@ def compute_neighborhood_profile(lat: float, lng: float) -> tuple:
         100.0
     )
 
-    # Housing growth signal: distance from Phoenix growth corridors
-    growth_corridors = [(33.4484, -112.0740), (33.3528, -111.7890), (33.5092, -112.1126)]
+    # Housing growth signal: distance from Minneapolis Metro growth corridors
+    growth_corridors = [(44.8547, -93.4708), (45.1197, -93.3111), (44.7677, -93.2777)]
     min_dist = min(_haversine_miles(lat, lng, clat, clng) for clat, clng in growth_corridors)
     housing_growth = max(40.0, 90.0 - min_dist * 3.0)
 

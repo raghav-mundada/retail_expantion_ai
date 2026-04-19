@@ -5,11 +5,11 @@ import { motion } from "framer-motion";
 import { ArrowRight, MapPin, Navigation } from "lucide-react";
 import { fmtCoord } from "../lib/format";
 
-// Phoenix Metro — wide bounds to cover all candidate sites
-const PHOENIX_CENTER: [number, number] = [33.4484, -112.0740];
-const PHOENIX_BOUNDS: L.LatLngBoundsLiteral = [
-  [33.0, -112.8],  // SW — covers Goodyear, Laveen
-  [33.9, -111.5],  // NE — covers Queen Creek, Scottsdale North
+// Minneapolis Metro — bounds cover the full Twin Cities area
+const MPLS_CENTER: [number, number] = [44.9778, -93.2650];
+const MPLS_BOUNDS: L.LatLngBoundsLiteral = [
+  [44.75, -93.55],  // SW — covers Eden Prairie, Bloomington
+  [45.20, -92.85],  // NE — covers Maplewood, White Bear Lake
 ];
 
 // Custom emerald pin
@@ -55,12 +55,12 @@ export function MapPicker({ onAnalyze, retailerName }: Props) {
     <div className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
       {/* Map */}
       <MapContainer
-        center={PHOENIX_CENTER}
-        zoom={10}
-        minZoom={9}
+        center={MPLS_CENTER}
+        zoom={11}
+        minZoom={10}
         maxZoom={16}
-        maxBounds={PHOENIX_BOUNDS}
-        maxBoundsViscosity={0.9}
+        maxBounds={MPLS_BOUNDS}
+        maxBoundsViscosity={1}
         zoomControl={true}
         scrollWheelZoom={true}
         className="h-full w-full"
@@ -93,7 +93,7 @@ export function MapPicker({ onAnalyze, retailerName }: Props) {
           <div className="label-xs mb-4">CHAPTER TWO — LOCATE</div>
           <h1 className="display-md mb-3">
             Drop a pin{retailerName ? <> for <em className="italic font-display">{retailerName}</em></> : ""}<br />
-            anywhere in Phoenix Metro.
+            anywhere in Minneapolis Metro.
           </h1>
           <p className="text-sm text-graphite leading-relaxed">
             We'll run 8 parallel agents — demographics, competitors, hotspot signals,
@@ -187,7 +187,7 @@ export function MapPicker({ onAnalyze, retailerName }: Props) {
       <div className="absolute bottom-8 left-8 z-[1000] bg-paper/80 backdrop-blur-sm px-3 py-2">
         <div className="flex items-center gap-3 text-graphite">
           <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span className="label-xs">PHOENIX METRO · 10 CANDIDATE SITES · 8-AGENT AI PIPELINE</span>
+          <span className="label-xs">MINNEAPOLIS METRO · 10 CANDIDATE SITES · 8-AGENT AI PIPELINE</span>
         </div>
       </div>
     </div>

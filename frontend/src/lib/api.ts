@@ -2,7 +2,7 @@
 // Backend API client — talks to FastAPI on :8000
 // ────────────────────────────────────────────────────────────
 
-const BASE = "http://localhost:8000";
+const BASE = "http://localhost:8003";
 
 // ── Legacy v1 types (debate/run endpoints) ────────────────────────────────────
 

@@ -194,7 +194,13 @@ async def run_amenity_agent(
         yield {"agent": "amenity", "status": "running",
                "message": "🕷️ TinyFish: checking Loopnet for available commercial spaces..."}
         try:
-            loopnet_data = await scrape_loopnet_listings(region_city, store_size.value)
+            from app.core.config import get_settings
+
+            lf_budget = max(12.0, float(get_settings().tinyfish_agent_timeout_seconds) + 6.0)
+            loopnet_data = await asyncio.wait_for(
+                scrape_loopnet_listings(region_city, store_size.value),
+                timeout=lf_budget,
+            )
             loopnet_count = loopnet_data.get("count", 0)
             listings = loopnet_data.get("listings", [])
             # Infer available space types
@@ -211,9 +217,9 @@ async def run_amenity_agent(
             tf_powered = True
             yield {"agent": "amenity", "status": "running",
                    "message": f"  Loopnet: {loopnet_count} available spaces ({', '.join(space_types)})"}
-        except Exception as e:
+        except (asyncio.TimeoutError, Exception) as e:
             yield {"agent": "amenity", "status": "running",
-                   "message": f"  Loopnet scrape failed: {e} — using estimate"}
+                   "message": f"  Loopnet scrape skipped/failed ({str(e)[:80]}) — using estimate"}
             loopnet_count = int(_stable_fallback_score(lat, lng, 3.0) / 15)
     else:
         loopnet_count = int(_stable_fallback_score(lat, lng, 3.0) / 15)

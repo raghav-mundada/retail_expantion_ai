@@ -33,6 +33,7 @@ from app.services.scoring_engine import compute_location_score
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _reverse_geocode(lat: float, lng: float) -> str:
     try:
         geolocator = Nominatim(user_agent="retailiq-mvp")

@@ -8,8 +8,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.models.schemas import (
-    AnalyzeRequest, CandidateSite, RetailerProfile,
-    StoreSizeEnum, ProductCategory, PricePositioning,
+    AnalyzeRequest,
+    CandidateSite,
+    RetailerProfile,
+    StoreSizeEnum,
+    ProductCategory,
+    PricePositioning,
 )
 from app.agents.orchestrator import run_orchestrator
 from app.services.osm_service import fetch_competitors
@@ -42,26 +46,26 @@ KNOWN_BRANDS_LIST = [
 
 # ── Candidate Sites ───────────────────────────────────────────────────────────
 CANDIDATE_SITES = [
-    CandidateSite(id="ph1", name="Gilbert Gateway Towne Center Area", lat=33.34, lng=-111.76,
-                  description="High-growth East Valley corridor, family-dense, strong school district", acreage=18.5, zoning_type="C-2 Commercial"),
-    CandidateSite(id="ph2", name="Peoria 101 Corridor", lat=33.5806, lng=-112.23,
-                  description="Growing suburban northwest, new housing developments nearby", acreage=22.0, zoning_type="C-3 General Commercial"),
-    CandidateSite(id="ph3", name="Queen Creek Marketplace Area", lat=33.2487, lng=-111.66,
-                  description="Fastest-growing submarket in metro Phoenix, underserved retail", acreage=25.0, zoning_type="C-2 Commercial"),
-    CandidateSite(id="ph4", name="Scottsdale McDowell Road", lat=33.4862, lng=-111.9095,
-                  description="High-income urban edge, premium-aligned demographics", acreage=12.0, zoning_type="B-1 Retail"),
-    CandidateSite(id="ph5", name="Laveen Village Center", lat=33.3806, lng=-112.17,
-                  description="Emerging southwest Phoenix, low competition, high growth", acreage=30.0, zoning_type="C-2 Commercial"),
-    CandidateSite(id="ph6", name="Mesa Superstition Springs Area", lat=33.395, lng=-111.69,
-                  description="Established East Mesa retail corridor, strong family base", acreage=20.0, zoning_type="C-3 General Commercial"),
-    CandidateSite(id="ph7", name="Avondale Estrella Corridor", lat=33.4355, lng=-112.38,
-                  description="West Valley growth zone, budget-friendly demographics", acreage=28.0, zoning_type="C-2 Commercial"),
-    CandidateSite(id="ph8", name="Chandler Fashion Triangle", lat=33.3062, lng=-111.89,
-                  description="Affluent South Chandler, strong premium brand alignment", acreage=15.0, zoning_type="B-2 General Business"),
-    CandidateSite(id="ph9", name="North Scottsdale 101 Node", lat=33.6391, lng=-111.87,
-                  description="High-income Scottsdale fringe, premium household incomes", acreage=16.0, zoning_type="C-1 Neighborhood Commercial"),
-    CandidateSite(id="ph10", name="Goodyear Cotton Lane Area", lat=33.4353, lng=-112.45,
-                  description="Far West Valley newcomers, underserved big-box market", acreage=35.0, zoning_type="C-2 Commercial"),
+    CandidateSite(id="mpls1", name="Uptown Hennepin Corridor", lat=44.9479, lng=-93.2988,
+                  description="Dense urban village, high foot traffic, strong millennial and young-family demo", acreage=8.5, zoning_type="C-3A Community Activity Center"),
+    CandidateSite(id="mpls2", name="Northeast Minneapolis Arts District", lat=44.9968, lng=-93.2535,
+                  description="Rapidly gentrifying creative district, rising incomes, underserved grocery", acreage=10.0, zoning_type="C-2 Neighborhood Commercial"),
+    CandidateSite(id="mpls3", name="Bloomington Penn Avenue Node", lat=44.8408, lng=-93.3376,
+                  description="South-ring suburb corridor, family-dense, strong school district signal", acreage=20.0, zoning_type="C-2 General Commercial"),
+    CandidateSite(id="mpls4", name="Eden Prairie Town Center Area", lat=44.8547, lng=-93.4708,
+                  description="Affluent southwest suburb, premium-income households, limited competition", acreage=18.0, zoning_type="C-REG Regional Commercial"),
+    CandidateSite(id="mpls5", name="Richfield 66th Street Corridor", lat=44.8763, lng=-93.2839,
+                  description="Established inner-ring suburb, budget-friendly demographics, high AADT", acreage=14.0, zoning_type="C-2 General Commercial"),
+    CandidateSite(id="mpls6", name="Coon Rapids Northdale Boulevard", lat=45.1197, lng=-93.3111,
+                  description="Growing northern suburb, new housing developments, underserved big-box", acreage=25.0, zoning_type="B-4 Community Business"),
+    CandidateSite(id="mpls7", name="Burnsville Heart of the City", lat=44.7677, lng=-93.2777,
+                  description="South metro redevelopment zone, mixed-income base, transit-adjacent", acreage=16.0, zoning_type="PUD Planned Unit Development"),
+    CandidateSite(id="mpls8", name="Plymouth Hwy 55 Retail Node", lat=45.0105, lng=-93.4555,
+                  description="High-growth western suburb, young families, strong household incomes", acreage=22.0, zoning_type="C-2 General Commercial"),
+    CandidateSite(id="mpls9", name="St. Louis Park Excelsior Blvd", lat=44.9275, lng=-93.3594,
+                  description="Inner-ring premium corridor, high walkability, educated affluent demo", acreage=11.0, zoning_type="MX Mixed-Use"),
+    CandidateSite(id="mpls10", name="Brooklyn Center Shingle Creek Crossing", lat=45.0720, lng=-93.3317,
+                  description="Redeveloping north suburb, low competition, value-oriented consumer base", acreage=30.0, zoning_type="C-2 Commerce"),
 ]
 
 
@@ -69,7 +73,7 @@ CANDIDATE_SITES = [
 
 @router.get("/candidates")
 async def get_candidates():
-    """Return pre-defined Phoenix metro candidate sites."""
+    """Return pre-defined Minneapolis metro candidate sites."""
     return {"candidates": [s.model_dump() for s in CANDIDATE_SITES]}
 
 
@@ -85,7 +89,7 @@ async def get_known_brands():
 
 
 @router.get("/competitors")
-async def get_competitors(lat: float = 33.4484, lng: float = -112.0740, radius: float = 25.0):
+async def get_competitors(lat: float = 44.9778, lng: float = -93.2650, radius: float = 25.0):
     """Return competitor store locations for map overlay."""
     try:
         stores = fetch_competitors(lat, lng, radius)

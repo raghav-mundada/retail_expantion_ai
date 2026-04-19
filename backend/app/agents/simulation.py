@@ -15,21 +15,17 @@ import json
 import os
 import random
 import math
-import warnings
 from typing import Optional
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore", FutureWarning)
-    import google.generativeai as genai
+from openai import OpenAI
 from app.models.schemas import DemographicsProfile, CompetitorProfile, SimulationResult
 from app.core.config import get_settings
 
 
-def _configure_gemini():
+def _get_openai_client():
     settings = get_settings()
-    if settings.gemini_api_key and settings.gemini_api_key != "your_gemini_api_key_here":
-        genai.configure(api_key=settings.gemini_api_key)
-        return True
-    return False
+    if settings.openai_api_key and settings.openai_api_key != "your_openai_api_key_here":
+        return OpenAI(api_key=settings.openai_api_key)
+    return None
 
 
 HOUSEHOLD_TYPOLOGIES = [
@@ -98,25 +94,18 @@ def _simulate_households_local(
     return households
 
 
-async def _simulate_with_gemini(
+async def _simulate_with_openai(
     demographics: DemographicsProfile,
     competitors: CompetitorProfile,
     brand: str,
 ) -> Optional[list[dict]]:
-    """Use Gemini to generate diverse, realistic household agent decisions."""
-    if not _configure_gemini():
+    """Use OpenAI to generate diverse, realistic household agent decisions."""
+    client = _get_openai_client()
+    if not client:
         return None
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            temperature=0.7,
-        ),
-    )
-
     prompt = f"""You are a retail market simulation engine. Generate exactly 40 diverse household agent profiles
-for a proposed new {brand.title()} superstore in Phoenix, AZ metro area.
+for a proposed new {brand.title()} store.
 
 Market context:
 - Trade area population: {demographics.population:,}
@@ -126,7 +115,7 @@ Market context:
 - Market saturation score: {competitors.saturation_score:.0f}/100
 - Area underserved: {competitors.underserved}
 
-Return a JSON array of exactly 40 objects, each with:
+Return a JSON object with a single key "households" containing an array of exactly 40 objects, each with:
 {{
   "typology": "string (e.g. Budget Family, Young Professional, Affluent Couple)",
   "income_bracket": "string (e.g. $45k-$65k)",
@@ -143,13 +132,20 @@ Be realistic and diverse. For {brand}: {"favor price-sensitive, larger families,
 The underserved status ({competitors.underserved}) means {"high opportunity — people currently travel far to shop" if competitors.underserved else "moderate competition — some residents are already loyal to existing stores"}.
 """
 
-    try:
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: model.generate_content(prompt)
+    def _call() -> Optional[list[dict]]:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.7,
         )
-        return json.loads(response.text)
+        data = json.loads(resp.choices[0].message.content)
+        return data.get("households", data) if isinstance(data, dict) else data
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _call)
     except Exception as e:
-        print(f"[SimulationAgent] Gemini error: {e}")
+        print(f"[SimulationAgent] OpenAI error: {e}")
         return None
 
 
@@ -208,23 +204,32 @@ async def run_simulation_agent(
     await asyncio.sleep(0.3)
 
     settings = get_settings()
-    use_gemini = settings.gemini_api_key and settings.gemini_api_key != "your_gemini_api_key_here"
+    use_openai = bool(settings.openai_api_key and settings.openai_api_key != "your_openai_api_key_here")
 
-    if use_gemini:
+    if use_openai:
         yield {"agent": "simulation", "status": "running",
-               "message": "Engaging Gemini 2.0 Flash to generate diverse household agent profiles..."}
-        gemini_households = await _simulate_with_gemini(demographics, competitors, brand)
+               "message": "Engaging GPT-4o-mini to generate household agent profiles (time-bounded)..."}
+        budget = float(get_settings().analysis_simulation_openai_timeout_seconds)
+        budget = max(12.0, min(budget, 120.0))
+        try:
+            ai_households = await asyncio.wait_for(
+                _simulate_with_openai(demographics, competitors, brand),
+                timeout=budget,
+            )
+        except asyncio.TimeoutError:
+            print(f"[Simulation] OpenAI exceeded {budget:.0f}s — using statistical fallback")
+            ai_households = None
     else:
-        gemini_households = None
+        ai_households = None
         yield {"agent": "simulation", "status": "running",
                "message": "Running statistical household simulation (500 agents: budget families, young professionals, retirees, dual-income households...)"}
 
     await asyncio.sleep(0.5)
 
-    if gemini_households:
-        households = gemini_households
+    if ai_households:
+        households = ai_households
         yield {"agent": "simulation", "status": "running",
-               "message": f"Gemini generated {len(households)} diverse household profiles. "
+               "message": f"GPT-4o generated {len(households)} diverse household profiles. "
                            f"Simulating shopping decisions, brand loyalty decay, distance friction..."}
     else:
         households = _simulate_households_local(demographics, competitors, brand)

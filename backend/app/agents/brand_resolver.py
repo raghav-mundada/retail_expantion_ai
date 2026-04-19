@@ -10,12 +10,8 @@ Runs BEFORE all other agents — its output feeds brand_fit, simulation, and com
 """
 import json
 import asyncio
-import warnings
 from typing import AsyncGenerator, Optional, Dict
-
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore", FutureWarning)
-    import google.generativeai as genai
+from openai import OpenAI
 
 from app.models.schemas import RetailerProfile, BrandDNA, StoreSizeEnum, PricePositioning
 from app.core.config import get_settings
@@ -115,13 +111,10 @@ def _build_from_lookup(brand_name: str) -> Optional[BrandDNA]:
     return None
 
 
-async def _gemini_resolve(brand_name: str) -> BrandDNA:
-    """Use Gemini 2.0 Flash to resolve unknown brand DNA."""
-    if not settings.gemini_api_key:
-        raise ValueError("No Gemini API key")
-
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash-exp")
+async def _openai_resolve(brand_name: str) -> BrandDNA:
+    """Use OpenAI GPT-4o-mini to resolve unknown brand DNA."""
+    if not settings.openai_api_key:
+        raise ValueError("No OpenAI API key")
 
     prompt = f"""You are a retail industry expert. Analyze the retail brand "{brand_name}" and return a JSON object with this exact schema:
 
@@ -144,12 +137,18 @@ async def _gemini_resolve(brand_name: str) -> BrandDNA:
 If "{brand_name}" is not a real known retail brand, make a best-effort estimation based on the name.
 Return ONLY the JSON object, no markdown."""
 
-    response = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: model.generate_content(prompt)
-    )
-    raw = response.text.strip().strip("```json").strip("```").strip()
-    data = json.loads(raw)
-    return BrandDNA(**data)
+    def _call() -> BrandDNA:
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        data = json.loads(resp.choices[0].message.content)
+        return BrandDNA(**data)
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call)
 
 
 async def run_brand_resolver_agent(
@@ -176,15 +175,20 @@ async def run_brand_resolver_agent(
 
         if brand_dna is None:
             yield {"agent": "brand_resolver", "status": "running",
-                   "message": f"Brand '{retailer.brand_name}' not in quick-lookup, querying Gemini..."}
+                   "message": f"Brand '{retailer.brand_name}' not in quick-lookup, querying OpenAI..."}
             try:
-                brand_dna = await _gemini_resolve(retailer.brand_name)
+                budget = float(get_settings().analysis_brand_resolver_openai_timeout_seconds)
+                budget = max(6.0, min(budget, 90.0))
+                brand_dna = await asyncio.wait_for(
+                    _openai_resolve(retailer.brand_name),
+                    timeout=budget,
+                )
                 yield {"agent": "brand_resolver", "status": "running",
-                       "message": f"✓ Gemini resolved: {brand_dna.store_format} | ${brand_dna.ideal_income_low:,}–${brand_dna.ideal_income_high:,} income target"}
+                       "message": f"✓ OpenAI resolved: {brand_dna.store_format} | ${brand_dna.ideal_income_low:,}–${brand_dna.ideal_income_high:,} income target"}
             except Exception as e:
                 # Final fallback — treat as mid_range general merchandise
                 yield {"agent": "brand_resolver", "status": "running",
-                       "message": f"⚠ Gemini unavailable ({e}) — using generic brand profile"}
+                       "message": f"⚠ OpenAI unavailable ({e}) — using generic brand profile"}
                 brand_dna = BrandDNA(
                     display_name=retailer.brand_name.title(),
                     ideal_income_low=45_000, ideal_income_high=110_000,
