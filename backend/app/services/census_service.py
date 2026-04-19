@@ -9,15 +9,12 @@ if the Census API is unavailable.
 """
 import json
 import math
-import os
 import hashlib
 import requests
 from typing import Optional, Tuple
 from app.models.schemas import DemographicsProfile
 from app.core.config import get_settings
-
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "../../data/cache")
-os.makedirs(CACHE_DIR, exist_ok=True)
+from app.services.supabase_service import cache_get, cache_set
 
 # ACS 5-Year variable codes
 ACS_VARS = {
@@ -38,8 +35,8 @@ GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinate
 
 # ── FIPS Resolution ─────────────────────────────────────────────────────────
 
-def _geocoder_cache_path(lat: float, lng: float) -> str:
-    return os.path.join(CACHE_DIR, f"fips_{lat:.3f}_{lng:.3f}.json")
+def _geocoder_cache_key(lat: float, lng: float) -> str:
+    return f"fips:{lat:.3f},{lng:.3f}"
 
 
 def resolve_fips(lat: float, lng: float) -> Tuple[str, str, str]:
@@ -47,22 +44,19 @@ def resolve_fips(lat: float, lng: float) -> Tuple[str, str, str]:
     Resolve (lat, lng) → (state_fips, county_fips, county_name) using the
     Census Bureau Geocoder API (100% free, no key required).
 
-    Results are cached forever (FIPS boundaries don't change).
-    Returns ("04", "013", "Maricopa County") format.
+    Results are cached in Supabase `cache` table forever (FIPS boundaries don't change).
     Falls back to nearest hardcoded county if geocoder is unavailable.
     """
-    cache_file = _geocoder_cache_path(lat, lng)
-    if os.path.exists(cache_file):
-        with open(cache_file) as f:
-            data = json.load(f)
-            return data["state_fips"], data["county_fips"], data["county_name"]
+    cache_key = _geocoder_cache_key(lat, lng)
+    cached = cache_get(cache_key)
+    if cached:
+        return cached["state_fips"], cached["county_fips"], cached["county_name"]
 
     try:
         resp = requests.get(
             GEOCODER_URL,
             params={
-                "x": lng,
-                "y": lat,
+                "x": lng, "y": lat,
                 "benchmark": "Public_AR_Current",
                 "vintage": "Current_Current",
                 "layers": "Counties",
@@ -72,24 +66,19 @@ def resolve_fips(lat: float, lng: float) -> Tuple[str, str, str]:
         )
         resp.raise_for_status()
         data = resp.json()
-        counties = (
-            data.get("result", {})
-                .get("geographies", {})
-                .get("Counties", [])
-        )
+        counties = data.get("result", {}).get("geographies", {}).get("Counties", [])
         if counties:
             c = counties[0]
-            state_fips  = c.get("STATE", "")
-            county_fips = c.get("COUNTY", "")
-            county_name = c.get("NAME", "Unknown County")
-            result = {"state_fips": state_fips, "county_fips": county_fips, "county_name": county_name}
-            with open(cache_file, "w") as f:
-                json.dump(result, f)
-            return state_fips, county_fips, county_name
+            result = {
+                "state_fips":  c.get("STATE", ""),
+                "county_fips": c.get("COUNTY", ""),
+                "county_name": c.get("NAME", "Unknown County"),
+            }
+            cache_set(cache_key, result)
+            return result["state_fips"], result["county_fips"], result["county_name"]
     except Exception as e:
         print(f"[CensusService] Geocoder failed for ({lat:.3f},{lng:.3f}): {e}")
 
-    # Fallback: nearest known county center
     return _nearest_fallback_county(lat, lng)
 
 
@@ -228,8 +217,8 @@ def _nearest_fallback_county(lat: float, lng: float) -> Tuple[str, str, str]:
 
 # ── Census Data ──────────────────────────────────────────────────────────────
 
-def _county_cache_path(state_fips: str, county_fips: str) -> str:
-    return os.path.join(CACHE_DIR, f"acs_{state_fips}_{county_fips}.json")
+def _county_cache_key(state_fips: str, county_fips: str) -> str:
+    return f"acs:{state_fips}:{county_fips}"
 
 
 def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -242,11 +231,12 @@ def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
 
 
 def fetch_tract_demographics(state_fips: str, county_fips: str, api_key: str = "") -> list[dict]:
-    """Fetch all census tracts for a county (cached per county)."""
-    cache_file = _county_cache_path(state_fips, county_fips)
-    if os.path.exists(cache_file):
-        with open(cache_file) as f:
-            return json.load(f)
+    """Fetch all census tracts for a county (cached in Supabase)."""
+    cache_key = _county_cache_key(state_fips, county_fips)
+    cached = cache_get(cache_key)
+    if cached:
+        print(f"[CensusService] Cache hit: {len(cached)} tracts for {state_fips}/{county_fips}")
+        return cached
 
     variables = ",".join(ACS_VARS.keys())
     params = {
@@ -263,9 +253,8 @@ def fetch_tract_demographics(state_fips: str, county_fips: str, api_key: str = "
         data = resp.json()
         headers = data[0]
         rows = [dict(zip(headers, row)) for row in data[1:]]
-        with open(cache_file, "w") as f:
-            json.dump(rows, f)
-        print(f"[CensusService] Fetched {len(rows)} tracts for {state_fips}/{county_fips}")
+        cache_set(cache_key, rows)
+        print(f"[CensusService] Fetched + cached {len(rows)} tracts for {state_fips}/{county_fips}")
         return rows
     except Exception as e:
         print(f"[CensusService] ACS fetch failed for {state_fips}/{county_fips}: {e}")

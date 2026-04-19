@@ -34,3 +34,9 @@ npm-debug.log*
 .idea/
 *.swp
 *.swo
+
+# Local data cache — moved to Supabase, never commit
+backend/data/cache/
+backend/data/processed/
+data/cache/
+data/processed/
