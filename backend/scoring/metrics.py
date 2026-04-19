@@ -85,6 +85,47 @@ STORE_FORMATS: dict[str, dict[str, Any]] = {
             "fresh thyme", "sprouts",
         ],
     },
+    # ── Small / independent formats — for the local-business operator ──
+    "Local Grocery": {
+        "income_sweet_spot" : (40_000, 110_000),  # serves a wider band
+        "min_population"    : 8_000,              # neighborhood-scale market
+        "brand_weight"      : 35,                 # weak brand pull vs chains
+        "capex_usd"         : 1_500_000,          # leasehold buildout
+        "operating_margin"  : 0.03,               # razor-thin grocery margin
+        "min_parcel_acres"  : 0.5,
+        "category_share"    : 0.040,              # ~4% of HH spend on grocery
+        "rival_keywords"    : [
+            "grocery", "market", "foods", "supermercado", "deli",
+            "aldi", "cub foods", "lunds", "byerly", "fresh thyme",
+            "trader joe", "whole foods", "kowalski",
+        ],
+    },
+    "Convenience Store": {
+        "income_sweet_spot" : (25_000, 90_000),
+        "min_population"    : 5_000,
+        "brand_weight"      : 30,
+        "capex_usd"         : 800_000,
+        "operating_margin"  : 0.06,               # higher margin per dollar
+        "min_parcel_acres"  : 0.25,
+        "category_share"    : 0.022,
+        "rival_keywords"    : [
+            "convenience", "7-eleven", "holiday", "speedway", "kwik",
+            "casey", "circle k", "bp", "shell", "mobil",
+        ],
+    },
+    "Coffee Shop": {
+        "income_sweet_spot" : (50_000, 200_000),
+        "min_population"    : 4_000,
+        "brand_weight"      : 25,
+        "capex_usd"         : 400_000,
+        "operating_margin"  : 0.10,
+        "min_parcel_acres"  : 0.15,
+        "category_share"    : 0.012,              # food-away-from-home slice
+        "rival_keywords"    : [
+            "coffee", "starbucks", "caribou", "dunkin", "peet",
+            "espresso", "cafe", "café",
+        ],
+    },
 }
 
 

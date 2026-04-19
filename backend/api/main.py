@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes.analyze import router as analyze_router
 from backend.api.routes.runs import router as runs_router
 from backend.api.routes.debate import router as debate_router
+from backend.api.routes.scout import router as scout_router
 
 app = FastAPI(
     title="Retail Expansion AI",
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(analyze_router, tags=["Pipeline"])
 app.include_router(runs_router,    tags=["Data"])
 app.include_router(debate_router,  tags=["Agents"])
+app.include_router(scout_router,   tags=["Scout"])
 
 
 @app.get("/", tags=["Health"])

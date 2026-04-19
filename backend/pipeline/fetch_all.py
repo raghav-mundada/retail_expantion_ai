@@ -140,8 +140,9 @@ def pull_demographics(lat, lon, radius_km):
         }
 
         tracts = df[[
-            "tract_geoid", "NAME", "dist_km", "total_population",
-            "total_households", "median_hh_income",
+            "tract_geoid", "NAME",
+            "centroid_lat", "centroid_lon", "dist_km",
+            "total_population", "total_households", "median_hh_income",
             "owner_share", "renter_share", "poverty_rate",
         ]].fillna("null").to_dict(orient="records")
 

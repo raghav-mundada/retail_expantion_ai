@@ -1,34 +1,90 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Sparkles, Loader } from "lucide-react";
 
 import { PhaseHeader } from "./components/PhaseHeader";
 import { MapPicker, type PickedLocation } from "./components/MapPicker";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { Dashboard } from "./components/Dashboard";
 import { AIRecommendation } from "./components/AIRecommendation";
+import { ScoutResults } from "./components/ScoutResults";
+import type { StoreFormat } from "./components/StoreFormatPicker";
 
-import { analyze, type AnalyzeResponse } from "./lib/api";
+import {
+  analyze,
+  scout,
+  type AnalyzeResponse,
+  type ScoutResponse,
+  type ScoutCandidate,
+} from "./lib/api";
 
-type Phase = "pick" | "loading" | "dashboard";
+type Phase =
+  | "pick"          // Map landing — manual or scout mode
+  | "loading"       // Loading screen for manual analyze
+  | "scouting"      // Loading screen for auto-scout
+  | "scout-results" // Top 3 candidates view
+  | "dashboard";    // Deep-dive dashboard
+
+interface DashboardLocation {
+  lat: number;
+  lon: number;
+  radius_km: number;
+}
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>("pick");
-  const [location, setLocation] = useState<PickedLocation | null>(null);
+  const [storeFormat, setStoreFormat] = useState<StoreFormat>("Target");
+  const [dashboardLoc, setDashboardLoc] = useState<DashboardLocation | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [scoutResult, setScoutResult] = useState<ScoutResponse | null>(null);
   const [showOracle, setShowOracle] = useState(false);
 
-  // We hold onto the in-flight fetch promise so the LoadingScreen can await it
+  // In-flight promises so loading screens can await them
   const fetchPromiseRef = useRef<Promise<AnalyzeResponse> | null>(null);
+  const scoutPromiseRef = useRef<Promise<ScoutResponse> | null>(null);
 
   const phaseNumber =
-    phase === "pick"      ? 1 :
-    phase === "loading"   ? 2 :
-    showOracle            ? 4 :
-                            3;
+    phase === "pick"           ? 1 :
+    phase === "loading"        ? 2 :
+    phase === "scouting"       ? 2 :
+    phase === "scout-results"  ? 2 :
+    showOracle                 ? 4 :
+                                 3;
 
   function handlePick(loc: PickedLocation) {
-    setLocation(loc);
-    fetchPromiseRef.current = analyze(loc.lat, loc.lon, loc.radius_km).then((res) => {
+    setStoreFormat(loc.store_format);
+
+    if (loc.mode === "manual") {
+      setDashboardLoc({ lat: loc.lat, lon: loc.lon, radius_km: loc.radius_km });
+      fetchPromiseRef.current = analyze(loc.lat, loc.lon, loc.radius_km).then((res) => {
+        setRunId(res.run_id);
+        return res;
+      });
+      setPhase("loading");
+    } else {
+      // Auto-scout — fire the scout call, show scouting loader
+      scoutPromiseRef.current = scout(loc.lat, loc.lon, loc.radius_km, loc.store_format)
+        .then((res) => {
+          setScoutResult(res);
+          setRunId(res.run_id);
+          return res;
+        });
+      setPhase("scouting");
+    }
+  }
+
+  function handleScoutComplete() {
+    setPhase("scout-results");
+  }
+
+  function handleDeepDive(candidate: ScoutCandidate) {
+    if (!scoutResult) return;
+    // Re-analyze around the picked candidate at a tight 3km — gives the
+    // dashboard an accurate, focused view of THIS specific spot. Cached
+    // hits return instantly.
+    const tightRadius = 3;
+    setDashboardLoc({ lat: candidate.lat, lon: candidate.lon, radius_km: tightRadius });
+    fetchPromiseRef.current = analyze(candidate.lat, candidate.lon, tightRadius).then((res) => {
       setRunId(res.run_id);
       return res;
     });
@@ -37,10 +93,12 @@ export default function App() {
 
   function handleReset() {
     setPhase("pick");
-    setLocation(null);
+    setDashboardLoc(null);
     setRunId(null);
+    setScoutResult(null);
     setShowOracle(false);
     fetchPromiseRef.current = null;
+    scoutPromiseRef.current = null;
   }
 
   return (
@@ -60,7 +118,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {phase === "loading" && location && fetchPromiseRef.current && (
+        {phase === "loading" && dashboardLoc && fetchPromiseRef.current && (
           <motion.div
             key="loading"
             initial={{ opacity: 0 }}
@@ -69,16 +127,48 @@ export default function App() {
             transition={{ duration: 0.4 }}
           >
             <LoadingScreen
-              lat={location.lat}
-              lon={location.lon}
-              radius_km={location.radius_km}
+              lat={dashboardLoc.lat}
+              lon={dashboardLoc.lon}
+              radius_km={dashboardLoc.radius_km}
               fetchPromise={fetchPromiseRef.current}
               onComplete={() => setPhase("dashboard")}
             />
           </motion.div>
         )}
 
-        {phase === "dashboard" && location && runId && (
+        {phase === "scouting" && scoutPromiseRef.current && (
+          <motion.div
+            key="scouting"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <ScoutingScreen
+              storeFormat={storeFormat}
+              promise={scoutPromiseRef.current}
+              onComplete={handleScoutComplete}
+            />
+          </motion.div>
+        )}
+
+        {phase === "scout-results" && scoutResult && (
+          <motion.div
+            key="scout-results"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <ScoutResults
+              data={scoutResult}
+              onDeepDive={handleDeepDive}
+              onReset={handleReset}
+            />
+          </motion.div>
+        )}
+
+        {phase === "dashboard" && dashboardLoc && runId && (
           <motion.div
             key="dashboard"
             initial={{ opacity: 0, y: 12 }}
@@ -88,9 +178,9 @@ export default function App() {
           >
             <Dashboard
               runId={runId}
-              lat={location.lat}
-              lon={location.lon}
-              radius_km={location.radius_km}
+              lat={dashboardLoc.lat}
+              lon={dashboardLoc.lon}
+              radius_km={dashboardLoc.radius_km}
               onAskOracle={() => setShowOracle(true)}
             />
           </motion.div>
@@ -101,11 +191,92 @@ export default function App() {
         {showOracle && runId && (
           <AIRecommendation
             runId={runId}
-            storeFormat="Target"
+            storeFormat={storeFormat}
             onClose={() => setShowOracle(false)}
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Lightweight scouting loader — distinct copy from the manual flow
+// ──────────────────────────────────────────────────────────────────
+
+const SCOUT_STAGES = [
+  "Sweeping every commercial parcel inside your area…",
+  "Pulling census tracts, traffic counts, and rival stores…",
+  "Scoring each parcel on demand, competition, and Huff capture…",
+  "Spreading the winners across distinct neighborhoods…",
+  "Selecting the top three candidates…",
+];
+
+function ScoutingScreen({
+  storeFormat,
+  promise,
+  onComplete,
+}: {
+  storeFormat: string;
+  promise: Promise<ScoutResponse>;
+  onComplete: () => void;
+}) {
+  const [stageIx, setStageIx] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const fired = useRef(false);
+
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    promise
+      .then(() => onComplete())
+      .catch((e) => setError(e.message ?? "Scout failed"));
+    const id = setInterval(
+      () => setStageIx((ix) => Math.min(ix + 1, SCOUT_STAGES.length - 1)),
+      2400,
+    );
+    const stop = setTimeout(() => clearInterval(id), 18_000);
+    return () => { clearInterval(id); clearTimeout(stop); };
+  }, [promise, onComplete]);
+
+  return (
+    <div className="h-[calc(100vh-4rem)] flex items-center justify-center px-6">
+      <div className="max-w-xl w-full">
+        <div className="flex items-center gap-3 mb-6">
+          <Sparkles className="w-4 h-4 text-emerald" strokeWidth={1.5} />
+          <span className="label-xs">AUTO-SCOUT · {storeFormat.toUpperCase()}</span>
+        </div>
+
+        <h1 className="display-lg mb-8 leading-[0.95]">
+          Finding the corners <em className="italic font-display">worth opening</em>.
+        </h1>
+
+        <div className="bg-snow border border-hairline p-6 space-y-3">
+          {SCOUT_STAGES.map((s, i) => {
+            const done    = i < stageIx;
+            const active  = i === stageIx;
+            const pending = i > stageIx;
+            return (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <div className="w-4 h-4 flex items-center justify-center">
+                  {done && <div className="w-1.5 h-1.5 bg-emerald rounded-full" />}
+                  {active && <Loader className="w-3.5 h-3.5 text-ink animate-spin" strokeWidth={1.5} />}
+                  {pending && <div className="w-1.5 h-1.5 bg-mist rounded-full" />}
+                </div>
+                <span className={done ? "text-graphite line-through" : active ? "text-ink" : "text-mist"}>
+                  {s}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div className="mt-6 bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
