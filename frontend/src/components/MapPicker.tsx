@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, type ChangeEvent } from "react";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
-import { ArrowRight, MapPin, Navigation, Crosshair, Sparkles, AlertCircle } from "lucide-react";
+import { ArrowRight, MapPin, Navigation, Crosshair, Sparkles, AlertCircle, LocateFixed } from "lucide-react";
 import { StoreFormatPicker, type StoreFormat } from "./StoreFormatPicker";
 
 const MPLS_CENTER: [number, number] = [44.9778, -93.2650];
@@ -55,6 +55,47 @@ interface Props {
   onAnalyze: (loc: PickedLocation) => void;
 }
 
+// Browser Geolocation wrapper — returns an imperative locate() + ui state.
+function useGeolocation() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const locate = (
+    onFound: (lat: number, lon: number, accuracy: number) => void,
+  ) => {
+    if (!("geolocation" in navigator)) {
+      setError("Geolocation is not supported in this browser");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setBusy(false);
+        onFound(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      },
+      (err) => {
+        setBusy(false);
+        setError(
+          err.code === err.PERMISSION_DENIED
+            ? "Location access denied — enable it in your browser settings"
+            : err.code === err.POSITION_UNAVAILABLE
+            ? "Location unavailable — try again outdoors"
+            : "Could not get your location",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
+    );
+  };
+
+  return { locate, busy, error, clearError: () => setError(null) };
+}
+
+function isInsideMpls(lat: number, lon: number): boolean {
+  const [[swLat, swLon], [neLat, neLon]] = MPLS_BOUNDS;
+  return lat >= swLat && lat <= neLat && lon >= swLon && lon <= neLon;
+}
+
 export function MapPicker({ onAnalyze }: Props) {
   const [mode, setMode] = useState<PickMode>("manual");
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
@@ -65,6 +106,8 @@ export function MapPicker({ onAnalyze }: Props) {
   const [inputError, setInputError] = useState<string | null>(null);
   const [heroOpen, setHeroOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [geoNotice, setGeoNotice] = useState<string | null>(null);
+  const { locate, busy: locating, error: geoError } = useGeolocation();
 
   const ready =
     pin !== null &&
@@ -88,6 +131,7 @@ export function MapPicker({ onAnalyze }: Props) {
     setLatInput("");
     setLonInput("");
     setInputError(null);
+    setGeoNotice(null);
   }
 
   function handleLatChange(e: ChangeEvent<HTMLInputElement>) {
@@ -169,6 +213,20 @@ export function MapPicker({ onAnalyze }: Props) {
     setInputError(null);
     setPin({ lat: latVal, lon: val });
   }
+
+  const handleUseMyLocation = () => {
+    setGeoNotice(null);
+    locate((lat, lon, accuracy) => {
+      if (!isInsideMpls(lat, lon)) {
+        setGeoNotice(
+          "You're outside Minneapolis — Atlas only analyzes MN sites today.",
+        );
+        return;
+      }
+      handleMapClick(lat, lon);
+      setGeoNotice(`Location locked · ±${Math.round(accuracy)} m accuracy`);
+    });
+  };
 
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
@@ -256,40 +314,11 @@ export function MapPicker({ onAnalyze }: Props) {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-8 right-8 z-[1000] w-[440px] max-h-[calc(100vh-4rem)] flex flex-col justify-end"
+        className="absolute bottom-8 right-8 z-[1000] w-[440px] max-h-[calc(100vh-4rem)]"
       >
-        <div className="bg-snow border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] overflow-hidden">
-          <button
-            onClick={() => setPanelOpen((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-bone transition border-t border-hairline flex-shrink-0"
-          >
-            <div className="flex items-center gap-2">
-              <span className="label-xs">SITE SELECTION</span>
-              {ready && <span className="w-1.5 h-1.5 rounded-full bg-emerald" />}
-            </div>
-            <span className="font-mono text-mist text-sm leading-none">
-              {panelOpen ? "−" : "+"}
-            </span>
-          </button>
-
-          <div className="px-6 py-4 flex items-center justify-between border-t border-hairline flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <MapPin className={`w-3.5 h-3.5 ${ready ? "text-emerald" : "text-mist"}`} strokeWidth={1.5} />
-              <span className="label-xs">
-                {ready
-                  ? isScout ? "ANCHOR PLACED" : "PIN PLACED"
-                  : isScout ? "AWAITING ANCHOR" : "AWAITING PIN"}
-              </span>
-            </div>
-            {(pin || latInput || lonInput) && (
-              <button onClick={handleReset} className="label-xs hover:text-ink transition">
-                Reset
-              </button>
-            )}
-          </div>
-
+        <div className="bg-snow border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] overflow-hidden flex flex-col">
           {panelOpen && (
-            <div className="overflow-y-auto max-h-[calc(100vh-14rem)] flex flex-col">
+            <div className="overflow-y-auto max-h-[calc(100vh-14rem)] flex flex-col order-1">
               <div className="grid grid-cols-2 border-b border-hairline flex-shrink-0">
                 <button
                   onClick={() => setMode("manual")}
@@ -416,13 +445,70 @@ export function MapPicker({ onAnalyze }: Props) {
               </button>
             </div>
           )}
+
+          <div className="px-6 py-4 flex items-center justify-between border-t border-hairline flex-shrink-0 order-2">
+            <div className="flex items-center gap-2">
+              <MapPin className={`w-3.5 h-3.5 ${ready ? "text-emerald" : "text-mist"}`} strokeWidth={1.5} />
+              <span className="label-xs">
+                {ready
+                  ? isScout ? "ANCHOR PLACED" : "PIN PLACED"
+                  : isScout ? "AWAITING ANCHOR" : "AWAITING PIN"}
+              </span>
+            </div>
+            {(pin || latInput || lonInput) && (
+              <button onClick={handleReset} className="label-xs hover:text-ink transition">
+                Reset
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={() => setPanelOpen((p) => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-bone transition border-t border-hairline flex-shrink-0 order-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className="label-xs">SITE SELECTION</span>
+              {ready && <span className="w-1.5 h-1.5 rounded-full bg-emerald" />}
+            </div>
+            <span className="font-mono text-mist text-sm leading-none">
+              {panelOpen ? "−" : "+"}
+            </span>
+          </button>
         </div>
       </motion.div>
 
-      <div className="absolute bottom-8 left-8 z-[1000] bg-paper/80 backdrop-blur-sm px-3 py-2">
-        <div className="flex items-center gap-3 text-graphite">
-          <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span className="label-xs">CITY OF MINNEAPOLIS · 87 NEIGHBORHOODS · 232 CENSUS TRACTS</span>
+      {/* Bottom-left — GPS + context strip */}
+      <div className="absolute bottom-8 left-8 z-[1000] flex flex-col gap-2 items-start">
+        <button
+          onClick={handleUseMyLocation}
+          disabled={locating}
+          title="Use my current GPS location"
+          className="bg-snow border border-hairline px-3 py-2 flex items-center gap-2 text-graphite
+                     hover:text-ink hover:border-ink transition shadow-[0_12px_30px_-18px_rgba(0,0,0,0.25)]
+                     disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <LocateFixed
+            className={`w-3.5 h-3.5 ${locating ? "animate-pulse text-emerald" : ""}`}
+            strokeWidth={1.5}
+          />
+          <span className="label-xs">
+            {locating ? "LOCATING…" : "USE MY LOCATION"}
+          </span>
+        </button>
+        {(geoError || geoNotice) && (
+          <div
+            className={`bg-snow border border-hairline px-3 py-1.5 text-[11px] leading-snug max-w-[280px] ${
+              geoError ? "text-rose-600" : "text-graphite"
+            }`}
+          >
+            {geoError ?? geoNotice}
+          </div>
+        )}
+        <div className="bg-paper/80 backdrop-blur-sm px-3 py-2">
+          <div className="flex items-center gap-3 text-graphite">
+            <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
+            <span className="label-xs">CITY OF MINNEAPOLIS · 87 NEIGHBORHOODS · 232 CENSUS TRACTS</span>
+          </div>
         </div>
       </div>
     </div>
