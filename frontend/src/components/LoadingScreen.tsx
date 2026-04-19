@@ -92,8 +92,7 @@ export function LoadingScreen({ lat, lon, radius_km, onComplete, fetchPromise }:
           backgroundSize: "60px 60px",
         }}
       />
-
-      <div className="relative h-full max-w-6xl mx-auto px-8 lg:px-12 grid grid-cols-12 gap-10 items-center">
+      <div className="relative min-h-full max-w-6xl mx-auto px-8 lg:px-12 py-12 grid grid-cols-12 gap-10 items-start">
         {/* LEFT — hero copy */}
         <div className="col-span-12 lg:col-span-5">
           <div className="label-xs mb-6">CHAPTER TWO — INGESTION</div>
