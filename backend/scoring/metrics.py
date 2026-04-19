@@ -54,6 +54,75 @@ STORE_FORMATS: dict[str, dict[str, Any]] = {
             "hypermarket", "general", "wholesale", "warehouse_club",
         ],
     },
+    "Walmart": {
+        "income_sweet_spot" : (35_000, 90_000),   # broader, lower band than Target
+        "min_population"    : 40_000,
+        "brand_weight"      : 110,                # largest pull of any US retailer
+        "capex_usd"         : 25_000_000,         # supercenter build
+        "capex_multiplier"  : 1.8,
+        "operating_margin"  : 0.026,              # razor-thin but volume-driven
+        "min_parcel_acres"  : 12.0,
+        "category_share"    : 0.055,              # GM + grocery combined
+        "rival_keywords"    : [
+            "walmart", "target", "costco", "sam's club", "bj",
+            "meijer", "fred meyer", "kmart", "hy-vee", "cub",
+            "menards", "home depot",
+        ],
+        "rival_categories"  : [
+            "supermarket", "department_store", "discount_store",
+            "hypermarket", "warehouse_club", "general",
+        ],
+    },
+    "Costco": {
+        "income_sweet_spot" : (70_000, 180_000),  # higher-income members
+        "min_population"    : 60_000,             # needs a big catchment
+        "brand_weight"      : 120,                # strongest membership pull
+        "capex_usd"         : 30_000_000,
+        "capex_multiplier"  : 1.7,
+        "operating_margin"  : 0.026,              # thin on goods; profit is membership
+        "min_parcel_acres"  : 15.0,
+        "category_share"    : 0.060,
+        "rival_keywords"    : [
+            "costco", "sam's club", "bj", "walmart", "target",
+        ],
+        "rival_categories"  : [
+            "warehouse_club", "hypermarket", "department_store",
+        ],
+    },
+    "Home Depot": {
+        "income_sweet_spot" : (45_000, 140_000),  # homeowners skew
+        "min_population"    : 25_000,
+        "brand_weight"      : 90,
+        "capex_usd"         : 14_000_000,
+        "capex_multiplier"  : 1.6,
+        "operating_margin"  : 0.10,               # actual HD net margin ≈ 10%
+        "min_parcel_acres"  : 10.0,
+        "category_share"    : 0.030,              # DIY / home-improvement share
+        "rival_keywords"    : [
+            "home depot", "lowe", "menards", "ace hardware", "true value",
+            "harbor freight",
+        ],
+        "rival_categories"  : [
+            "doityourself", "hardware", "home_improvement", "garden_center",
+        ],
+    },
+    "Best Buy": {
+        "income_sweet_spot" : (50_000, 150_000),
+        "min_population"    : 20_000,
+        "brand_weight"      : 65,
+        "capex_usd"         : 5_000_000,
+        "capex_multiplier"  : 1.5,
+        "operating_margin"  : 0.04,
+        "min_parcel_acres"  : 3.0,
+        "category_share"    : 0.020,              # electronics HH-spend share
+        "rival_keywords"    : [
+            "best buy", "microcenter", "apple store", "target",
+            "walmart", "costco",
+        ],
+        "rival_categories"  : [
+            "electronics", "computer", "mobile_phone", "department_store",
+        ],
+    },
     "Walgreens": {
         "income_sweet_spot" : (35_000, 80_000),
         "min_population"    : 15_000,
@@ -64,6 +133,19 @@ STORE_FORMATS: dict[str, dict[str, Any]] = {
         "category_share"    : 0.018,  # drug/pharmacy share of income
         "rival_keywords"    : [
             "walgreens", "cvs", "rite aid", "duane reade", "pharmacy",
+        ],
+        "rival_categories"  : ["pharmacy", "chemist", "drugstore"],
+    },
+    "CVS": {
+        "income_sweet_spot" : (35_000, 85_000),
+        "min_population"    : 15_000,
+        "brand_weight"      : 60,
+        "capex_usd"         : 4_000_000,
+        "operating_margin"  : 0.04,
+        "min_parcel_acres"  : 1.0,
+        "category_share"    : 0.018,
+        "rival_keywords"    : [
+            "cvs", "walgreens", "rite aid", "duane reade", "pharmacy",
         ],
         "rival_categories"  : ["pharmacy", "chemist", "drugstore"],
     },
@@ -95,6 +177,35 @@ STORE_FORMATS: dict[str, dict[str, Any]] = {
             "fresh thyme", "sprouts",
         ],
         "rival_categories"  : ["supermarket", "organic", "health_food"],
+    },
+    "Aldi": {
+        "income_sweet_spot" : (30_000, 85_000),   # value-seeking shoppers
+        "min_population"    : 15_000,
+        "brand_weight"      : 50,
+        "capex_usd"         : 3_000_000,
+        "capex_multiplier"  : 1.5,
+        "operating_margin"  : 0.045,
+        "min_parcel_acres"  : 1.5,
+        "category_share"    : 0.042,
+        "rival_keywords"    : [
+            "aldi", "lidl", "cub", "rainbow", "save-a-lot",
+            "winco", "food 4 less", "hy-vee", "walmart",
+        ],
+        "rival_categories"  : ["supermarket", "discount_store"],
+    },
+    "Starbucks": {
+        "income_sweet_spot" : (55_000, 220_000),  # skews higher than generic cafe
+        "min_population"    : 5_000,
+        "brand_weight"      : 55,
+        "capex_usd"         : 700_000,
+        "operating_margin"  : 0.14,               # stronger unit economics than indie
+        "min_parcel_acres"  : 0.15,
+        "category_share"    : 0.014,
+        "rival_keywords"    : [
+            "starbucks", "caribou", "dunkin", "peet", "dutch bros",
+            "coffee bean", "tim hortons",
+        ],
+        "rival_categories"  : ["coffee", "cafe", "tea"],
     },
     # ── Small / independent formats — for the local-business operator ──
     "Local Grocery": {
