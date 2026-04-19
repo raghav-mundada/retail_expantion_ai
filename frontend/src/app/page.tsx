@@ -5,6 +5,7 @@ import AgentTrace from "@/components/AgentTrace";
 import ScoreCard from "@/components/ScoreCard";
 import BrandSelector from "@/components/BrandSelector";
 import HistoryPanel from "@/components/HistoryPanel";
+import MetricsModal from "@/components/MetricsModal";
 import {
   getCandidates,
   getCompetitors,
@@ -33,6 +34,7 @@ export default function Home() {
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showMetrics, setShowMetrics] = useState(false);
   const stopRef = useRef<(() => void) | null>(null);
 
   // Load initial data
@@ -95,7 +97,7 @@ export default function Home() {
         region_city: "Phoenix, AZ",
       },
       (event) => setTraceEvents((prev) => [...prev, event]),
-      (res) => setResult(res),
+      (res) => { setResult(res); setShowMetrics(true); },
       (err) => {
         setError(err);
         setIsAnalyzing(false);
@@ -113,6 +115,7 @@ export default function Home() {
     (retailer.categories?.map((c) => c.replace("_", " ")).join(" + ") || "Custom Store");
 
   return (
+    <>
     <div className="app-layout">
       {/* ── Header ── */}
       <header className="app-header">
@@ -260,7 +263,7 @@ export default function Home() {
       {/* ── Right Panel ── */}
       <aside className="right-panel">
         {result ? (
-          <ScoreCard result={result} brand={result.brand} />
+          <ScoreCard result={result} brand={result.brand} onShowMetrics={() => setShowMetrics(true)} />
         ) : (
           <>
             {/* Agent Trace always shows when running */}
@@ -349,5 +352,11 @@ export default function Home() {
         </div>
       </aside>
     </div>
+
+    {/* Metrics Modal — auto-pops when analysis completes */}
+    {showMetrics && result && (
+      <MetricsModal result={result} onClose={() => setShowMetrics(false)} />
+    )}
+    </>
   );
 }

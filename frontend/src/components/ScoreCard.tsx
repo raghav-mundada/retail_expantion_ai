@@ -18,6 +18,7 @@ import {
 interface ScoreCardProps {
   result: AnalysisResult;
   brand: string;
+  onShowMetrics?: () => void;
 }
 
 function getRankColor(score: number): string {
@@ -46,7 +47,7 @@ function formatVisits(n: number): string {
   return String(n);
 }
 
-export default function ScoreCard({ result, brand }: ScoreCardProps) {
+export default function ScoreCard({ result, brand, onShowMetrics }: ScoreCardProps) {
   const { score, demographics, competitors, simulation, neighborhood, brand_fit, hotspot, amenity } = result;
   const rankColor = getRankColor(score.total_score);
 
@@ -102,6 +103,21 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
                 {score.rank_label}
               </span>
               <span className="placer-badge">PLACER.AI ✓</span>
+              {onShowMetrics && (
+                <button
+                  onClick={onShowMetrics}
+                  style={{
+                    background: "rgba(99,102,241,0.12)",
+                    border: "1px solid rgba(99,102,241,0.3)",
+                    borderRadius: 6, color: "#818cf8",
+                    fontSize: 10, fontWeight: 700,
+                    padding: "2px 9px", cursor: "pointer",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  📊 Raw Metrics
+                </button>
+              )}
             </div>
             <div className="score-label" style={{ marginTop: 6, fontSize: 11, color: "#7a9ab8" }}>
               {result.address_label}
