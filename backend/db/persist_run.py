@@ -32,22 +32,37 @@ def _safe_int(val) -> int | None:
         return None
 
 
-def persist_run(data: dict[str, Any]) -> str:
+def persist_run(
+    data: dict[str, Any],
+    user_id: str | None = None,
+    store_format: str | None = None,
+) -> str:
     """
     Persist a full fetch_all result dict to Supabase.
     Returns the run_id (uuid string).
+
+    `user_id` (optional) attributes the run to a logged-in Supabase user so
+    it shows up in their /me/runs history. `store_format` is stored on the
+    run itself for the same reason — saves the history page from joining
+    against agent_sessions just to get the format label.
     """
     db = get_client()
     q  = data["query"]
 
     # ── 1. analysis_runs (upsert so re-running same lat/lon is idempotent) ──
+    # Round to 6 decimals (~11cm precision) so float drift between requests
+    # can never create duplicate rows for what is functionally the same point.
     log.info("Persisting analysis_runs...")
-    run_row = {
-        "lat"        : q["lat"],
-        "lon"        : q["lon"],
-        "radius_km"  : q["radius_km"],
+    run_row: dict[str, Any] = {
+        "lat"        : round(float(q["lat"]), 6),
+        "lon"        : round(float(q["lon"]), 6),
+        "radius_km"  : round(float(q["radius_km"]), 3),
         "fetched_at" : q["fetched_at"],
     }
+    if user_id:
+        run_row["user_id"] = user_id
+    if store_format:
+        run_row["store_format"] = store_format
     res = (
         db.table("analysis_runs")
         .upsert(run_row, on_conflict="lat,lon,radius_km")
