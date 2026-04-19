@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapContainer, TileLayer, Marker, Tooltip, Circle } from "react-leaflet";
 import L from "leaflet";
-import { ArrowRight, MapPin, X, Trophy, TrendingUp, Users, DollarSign, Crosshair } from "lucide-react";
+import { ArrowRight, X, Trophy, TrendingUp, Users, DollarSign, Crosshair } from "lucide-react";
 
 import type { ScoutResponse, ScoutCandidate } from "../lib/api";
 import { fmtUSD, fmtNum } from "../lib/format";
