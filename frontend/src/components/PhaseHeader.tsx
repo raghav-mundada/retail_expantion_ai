@@ -1,4 +1,5 @@
 import { Brand } from "./Brand";
+import { UserMenu } from "./UserMenu";
 
 const PHASES = [
   { id: 1, label: "Locate" },
@@ -7,7 +8,14 @@ const PHASES = [
   { id: 4, label: "Decide" },
 ];
 
-export function PhaseHeader({ current, onReset }: { current: number; onReset?: () => void }) {
+interface Props {
+  current: number;
+  onReset?: () => void;
+  onSignInClick?: () => void;
+  onHistoryClick?: () => void;
+}
+
+export function PhaseHeader({ current, onReset, onSignInClick, onHistoryClick }: Props) {
   return (
     <header className="hairline-b bg-paper/90 backdrop-blur-md sticky top-0 z-[1100]">
       <div className="px-6 lg:px-10 h-16 flex items-center justify-between">
@@ -38,6 +46,11 @@ export function PhaseHeader({ current, onReset }: { current: number; onReset?: (
         <div className="flex items-center gap-4">
           <span className="label-xs hidden lg:inline">MINNEAPOLIS · MN</span>
           <span className="h-2 w-2 rounded-full bg-emerald animate-pulse" />
+          <span className="hidden sm:inline-block w-px h-5 bg-hairline" />
+          <UserMenu
+            onSignInClick={onSignInClick ?? (() => {})}
+            onHistoryClick={onHistoryClick ?? (() => {})}
+          />
         </div>
       </div>
     </header>

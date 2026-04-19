@@ -8,12 +8,16 @@ import { LoadingScreen } from "./components/LoadingScreen";
 import { Dashboard } from "./components/Dashboard";
 import { AIRecommendation } from "./components/AIRecommendation";
 import { ScoutResults } from "./components/ScoutResults";
+import { AuthModal } from "./components/AuthModal";
+import { HistoryPanel } from "./components/HistoryPanel";
 import type { StoreFormat } from "./components/StoreFormatPicker";
 
+import { useAuth } from "./lib/auth";
 import {
   analyze,
   scout,
   type AnalyzeResponse,
+  type MyRun,
   type ScoutResponse,
   type ScoutCandidate,
 } from "./lib/api";
@@ -32,12 +36,18 @@ interface DashboardLocation {
 }
 
 export default function App() {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("pick");
   const [storeFormat, setStoreFormat] = useState<StoreFormat>("Target");
   const [dashboardLoc, setDashboardLoc] = useState<DashboardLocation | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [scoutResult, setScoutResult] = useState<ScoutResponse | null>(null);
   const [showOracle, setShowOracle] = useState(false);
+
+  // Auth + history overlays
+  const [authOpen, setAuthOpen]       = useState(false);
+  const [authIntent, setAuthIntent]   = useState<"default" | "history" | "save">("default");
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // In-flight promises so loading screens can await them
   const fetchPromiseRef = useRef<Promise<AnalyzeResponse> | null>(null);
@@ -56,7 +66,7 @@ export default function App() {
 
     if (loc.mode === "manual") {
       setDashboardLoc({ lat: loc.lat, lon: loc.lon, radius_km: loc.radius_km });
-      fetchPromiseRef.current = analyze(loc.lat, loc.lon, loc.radius_km).then((res) => {
+      fetchPromiseRef.current = analyze(loc.lat, loc.lon, loc.radius_km, loc.store_format).then((res) => {
         setRunId(res.run_id);
         return res;
       });
@@ -72,6 +82,42 @@ export default function App() {
       setPhase("scouting");
     }
   }
+
+  function handleOpenHistory() {
+    if (!user) {
+      setAuthIntent("history");
+      setAuthOpen(true);
+      return;
+    }
+    setHistoryOpen(true);
+  }
+
+  function handleOpenSignIn() {
+    setAuthIntent("default");
+    setAuthOpen(true);
+  }
+
+  function handleOpenRunFromHistory(run: MyRun) {
+    // We already have the run_id and the data lives in Supabase — skip the
+    // /analyze cache lookup AND the cinematic loader entirely. Straight to
+    // the dashboard, which fetches its slices from /runs/{id}/...
+    setHistoryOpen(false);
+    setStoreFormat((run.store_format as StoreFormat) ?? "Target");
+    setDashboardLoc({ lat: run.lat, lon: run.lon, radius_km: run.radius_km });
+    setRunId(run.id);
+    setShowOracle(false);
+    setScoutResult(null);
+    fetchPromiseRef.current = null;
+    setPhase("dashboard");
+  }
+
+  // If the user just signed in and they were trying to view history, open it.
+  useEffect(() => {
+    if (user && authOpen && authIntent === "history") {
+      setAuthOpen(false);
+      setHistoryOpen(true);
+    }
+  }, [user, authOpen, authIntent]);
 
   function handleScoutComplete() {
     setPhase("scout-results");
@@ -103,7 +149,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <PhaseHeader current={phaseNumber} onReset={handleReset} />
+      <PhaseHeader
+        current={phaseNumber}
+        onReset={handleReset}
+        onSignInClick={handleOpenSignIn}
+        onHistoryClick={handleOpenHistory}
+      />
 
       <AnimatePresence mode="wait">
         {phase === "pick" && (
@@ -196,6 +247,18 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Auth + history overlays — sit above everything */}
+      <AuthModal
+        open={authOpen}
+        intent={authIntent}
+        onClose={() => setAuthOpen(false)}
+      />
+      <HistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onOpenRun={handleOpenRunFromHistory}
+      />
     </div>
   );
 }
