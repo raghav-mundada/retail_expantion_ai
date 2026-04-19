@@ -1,50 +1,43 @@
-import { useState, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
+import { useState, useMemo, useEffect } from "react";
+import { MapContainer, TileLayer, Marker, Circle, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
-import { ArrowRight, MapPin, Navigation, Crosshair, Sparkles } from "lucide-react";
-import { fmtCoord } from "../lib/format";
+import { ArrowRight, MapPin, Navigation, Crosshair, Sparkles, AlertCircle } from "lucide-react";
 import { StoreFormatPicker, type StoreFormat } from "./StoreFormatPicker";
 
-// Minneapolis hard bounds
 const MPLS_CENTER: [number, number] = [44.9778, -93.2650];
 const MPLS_BOUNDS: L.LatLngBoundsLiteral = [
-  [44.85, -93.40],  // SW
-  [45.10, -93.10],  // NE
+  [44.85, -93.40],
+  [45.10, -93.10],
 ];
 
-// Manual mode pin — emerald solid
+const LAT_MIN = 44.85, LAT_MAX = 45.10;
+const LON_MIN = -93.40, LON_MAX = -93.10;
+
 const pinIcon = L.divIcon({
   className: "",
-  html: `<div style="
-    width: 16px; height: 16px;
-    background: #047857;
-    border: 2px solid white;
-    border-radius: 9999px;
-    box-shadow: 0 0 0 1px #047857, 0 6px 14px rgba(0,0,0,0.18);
-  "></div>`,
+  html: `<div style="width:16px;height:16px;background:#047857;border:2px solid white;border-radius:9999px;box-shadow:0 0 0 1px #047857,0 6px 14px rgba(0,0,0,0.18)"></div>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
 
-// Scout mode anchor — outlined diamond, signals "this is the search center"
 const scoutAnchorIcon = L.divIcon({
   className: "",
-  html: `<div style="
-    width: 14px; height: 14px;
-    background: white;
-    border: 2px solid #0A0A0A;
-    transform: rotate(45deg);
-    box-shadow: 0 6px 14px rgba(0,0,0,0.18);
-  "></div>`,
+  html: `<div style="width:14px;height:14px;background:white;border:2px solid #0A0A0A;transform:rotate(45deg);box-shadow:0 6px 14px rgba(0,0,0,0.18)"></div>`,
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
 
 function ClickHandler({ onPick }: { onPick: (lat: number, lon: number) => void }) {
-  useMapEvents({
-    click: (e) => onPick(e.latlng.lat, e.latlng.lng),
-  });
+  useMapEvents({ click: (e) => onPick(e.latlng.lat, e.latlng.lng) });
+  return null;
+}
+
+function MapPanner({ pin }: { pin: { lat: number; lon: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pin) map.panTo([pin.lat, pin.lon]);
+  }, [pin, map]);
   return null;
 }
 
@@ -67,16 +60,71 @@ export function MapPicker({ onAnalyze }: Props) {
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
   const [radius, setRadius] = useState(5);
   const [format, setFormat] = useState<StoreFormat>("Target");
+  const [latInput, setLatInput] = useState("");
+  const [lonInput, setLonInput] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
 
-  const ready = pin !== null;
+  const ready = pin !== null && inputError === null;
   const radiusMeters = useMemo(() => radius * 1000, [radius]);
-
   const isScout = mode === "scout";
   const accent = isScout ? "#0A0A0A" : "#047857";
 
+  function handleMapClick(lat: number, lon: number) {
+    setPin({ lat, lon });
+    setLatInput(lat.toFixed(4));
+    setLonInput(lon.toFixed(4));
+    setInputError(null);
+  }
+
+  function handleReset() {
+    setPin(null);
+    setLatInput("");
+    setLonInput("");
+    setInputError(null);
+  }
+
+  function handleLatChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    setLatInput(raw);
+    if (raw.trim() === "") {
+      setInputError(null);
+      return;
+    }
+    const val = parseFloat(raw);
+    if (isNaN(val)) {
+      setInputError("Invalid latitude");
+      return;
+    }
+    if (val < LAT_MIN || val > LAT_MAX) {
+      setInputError(`Latitude must be ${LAT_MIN} – ${LAT_MAX} (Minneapolis)`);
+      return;
+    }
+    setInputError(null);
+    setPin((p) => ({ lat: val, lon: p?.lon ?? -93.265 }));
+  }
+
+  function handleLonChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    setLonInput(raw);
+    if (raw.trim() === "") {
+      setInputError(null);
+      return;
+    }
+    const val = parseFloat(raw);
+    if (isNaN(val)) {
+      setInputError("Invalid longitude");
+      return;
+    }
+    if (val < LON_MIN || val > LON_MAX) {
+      setInputError(`Longitude must be ${LON_MIN} – ${LON_MAX} (Minneapolis)`);
+      return;
+    }
+    setInputError(null);
+    setPin((p) => ({ lat: p?.lat ?? 44.977, lon: val }));
+  }
+
   return (
     <div className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
-      {/* Map */}
       <MapContainer
         center={MPLS_CENTER}
         zoom={12}
@@ -92,7 +140,8 @@ export function MapPicker({ onAnalyze }: Props) {
           attribution='&copy; OpenStreetMap'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
-        <ClickHandler onPick={(lat, lon) => setPin({ lat, lon })} />
+        <ClickHandler onPick={handleMapClick} />
+        <MapPanner pin={pin} />
         {pin && (
           <>
             <Circle
@@ -116,16 +165,16 @@ export function MapPicker({ onAnalyze }: Props) {
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-8 left-8 max-w-md z-[1000] pointer-events-none"
+        className="absolute top-8 left-8 max-w-xs z-[1000] pointer-events-none"
       >
-        <div className="bg-snow border border-hairline p-7 pointer-events-auto shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)]">
+        <div className="bg-snow/90 border border-hairline p-4 pointer-events-auto shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] backdrop-blur-sm">
           <div className="label-xs mb-4">CHAPTER ONE — LOCATE</div>
           {isScout ? (
             <>
-              <h1 className="display-md mb-3">
+              <h1 className="text-2xl font-display mb-2">
                 Let the engine <em className="italic font-display">find</em> the corners worth opening.
               </h1>
-              <p className="text-sm text-graphite leading-relaxed">
+              <p className="text-xs text-graphite leading-relaxed">
                 Drop an anchor and a search radius. We'll score every commercial
                 parcel inside, spread the winners across distinct neighborhoods,
                 and surface the top three.
@@ -133,10 +182,10 @@ export function MapPicker({ onAnalyze }: Props) {
             </>
           ) : (
             <>
-              <h1 className="display-md mb-3">
+              <h1 className="text-2xl font-display mb-2">
                 Drop a pin <em className="italic font-display">anywhere</em> in Minneapolis.
               </h1>
-              <p className="text-sm text-graphite leading-relaxed">
+              <p className="text-xs text-graphite leading-relaxed">
                 We'll pull every household, competitor, parcel, school, and traffic
                 count within your radius — and tell you whether it's worth the lease.
               </p>
@@ -153,14 +202,13 @@ export function MapPicker({ onAnalyze }: Props) {
         className="absolute bottom-8 right-8 z-[1000] w-[440px]"
       >
         <div className="bg-snow border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)]">
-          {/* ── Mode toggle ─────────────────────────────────────────── */}
+
+          {/* Mode toggle */}
           <div className="grid grid-cols-2 hairline-b">
             <button
               onClick={() => setMode("manual")}
               className={`px-4 py-3 flex items-center justify-center gap-2 transition
-                          ${mode === "manual"
-                            ? "bg-ink text-snow"
-                            : "bg-snow text-graphite hover:text-ink"}`}
+                ${mode === "manual" ? "bg-ink text-snow" : "bg-snow text-graphite hover:text-ink"}`}
             >
               <Crosshair className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span className="label-xs" style={{ color: mode === "manual" ? "white" : undefined }}>
@@ -170,9 +218,7 @@ export function MapPicker({ onAnalyze }: Props) {
             <button
               onClick={() => setMode("scout")}
               className={`px-4 py-3 flex items-center justify-center gap-2 transition border-l border-hairline
-                          ${mode === "scout"
-                            ? "bg-ink text-snow"
-                            : "bg-snow text-graphite hover:text-ink"}`}
+                ${mode === "scout" ? "bg-ink text-snow" : "bg-snow text-graphite hover:text-ink"}`}
             >
               <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span className="label-xs" style={{ color: mode === "scout" ? "white" : undefined }}>
@@ -181,51 +227,82 @@ export function MapPicker({ onAnalyze }: Props) {
             </button>
           </div>
 
-          {/* ── Status row ──────────────────────────────────────────── */}
+          {/* Status row */}
           <div className="hairline-b px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MapPin className={`w-3.5 h-3.5 ${ready ? "text-emerald" : "text-mist"}`} strokeWidth={1.5} />
+              <MapPin
+                className={`w-3.5 h-3.5 ${ready ? "text-emerald" : "text-mist"}`}
+                strokeWidth={1.5}
+              />
               <span className="label-xs">
                 {ready
                   ? isScout ? "ANCHOR PLACED" : "PIN PLACED"
                   : isScout ? "AWAITING ANCHOR" : "AWAITING PIN"}
               </span>
             </div>
-            {pin && (
-              <button onClick={() => setPin(null)} className="label-xs hover:text-ink transition">
+            {(pin || latInput || lonInput) && (
+              <button onClick={handleReset} className="label-xs hover:text-ink transition">
                 Reset
               </button>
             )}
           </div>
 
-          {/* ── Store format picker ─────────────────────────────────── */}
+          {/* Store format picker */}
           <div className="p-5 hairline-b">
             <div className="label-xs mb-2">STORE FORMAT</div>
             <StoreFormatPicker value={format} onChange={setFormat} />
           </div>
 
-          {/* ── Coords ──────────────────────────────────────────────── */}
+          {/* Coords */}
           <div className="grid grid-cols-2 hairline-b">
-            <div className="p-5 hairline-r border-r border-hairline">
+            <div className="p-5 border-r border-hairline">
               <div className="label-xs mb-2">LATITUDE</div>
-              <div className="font-mono text-base tabular text-ink">
-                {pin ? fmtCoord(pin.lat) : "— — — —"}
-              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="44.9778"
+                value={latInput}
+                onChange={handleLatChange}
+                onBlur={() => { if (pin && !inputError) setLatInput(pin.lat.toFixed(4)); }}
+                className={`font-mono text-base tabular text-ink bg-transparent w-full outline-none
+                  border-b pb-1 transition-colors placeholder:text-mist
+                  ${inputError ? "border-red-400" : "border-hairline focus:border-ink"}`}
+              />
             </div>
             <div className="p-5">
               <div className="label-xs mb-2">LONGITUDE</div>
-              <div className="font-mono text-base tabular text-ink">
-                {pin ? fmtCoord(pin.lon) : "— — — —"}
-              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="-93.2650"
+                value={lonInput}
+                onChange={handleLonChange}
+                onBlur={() => { if (pin && !inputError) setLonInput(pin.lon.toFixed(4)); }}
+                className={`font-mono text-base tabular text-ink bg-transparent w-full outline-none
+                  border-b pb-1 transition-colors placeholder:text-mist
+                  ${inputError ? "border-red-400" : "border-hairline focus:border-ink"}`}
+              />
             </div>
           </div>
 
-          {/* ── Radius ──────────────────────────────────────────────── */}
+          {/* Validation error */}
+          {inputError && (
+            <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" strokeWidth={1.5} />
+              <span className="text-xs text-red-600 font-mono">{inputError}</span>
+            </div>
+          )}
+
+          {/* Radius */}
           <div className="p-6 hairline-b">
             <div className="flex items-baseline justify-between mb-3">
-              <span className="label-xs">{isScout ? "SEARCH AREA RADIUS" : "CATCHMENT RADIUS"}</span>
+              <span className="label-xs">
+                {isScout ? "SEARCH AREA RADIUS" : "CATCHMENT RADIUS"}
+              </span>
               <div className="flex items-baseline gap-1.5">
-                <span className="font-display text-3xl tabular text-ink leading-none">{radius.toFixed(1)}</span>
+                <span className="font-display text-3xl tabular text-ink leading-none">
+                  {radius.toFixed(1)}
+                </span>
                 <span className="label-sm">KM</span>
               </div>
             </div>
@@ -246,38 +323,47 @@ export function MapPicker({ onAnalyze }: Props) {
             {isScout && (
               <div className="mt-3 text-[11px] text-graphite leading-relaxed">
                 We'll score every retail-compatible parcel inside this circle and
-                surface the top 3 — spaced at least <span className="text-ink font-medium">{(radius / 4).toFixed(1)} km</span> apart.
+                surface the top 3 — spaced at least{" "}
+                <span className="text-ink font-medium">{(radius / 4).toFixed(1)} km</span> apart.
               </div>
             )}
           </div>
 
-          {/* ── CTA ─────────────────────────────────────────────────── */}
+          {/* CTA */}
           <button
-            onClick={() => pin && onAnalyze({
-              mode,
-              lat: pin.lat,
-              lon: pin.lon,
-              radius_km: radius,
-              store_format: format,
-            })}
+            onClick={() =>
+              pin &&
+              onAnalyze({
+                mode,
+                lat: pin.lat,
+                lon: pin.lon,
+                radius_km: radius,
+                store_format: format,
+              })
+            }
             disabled={!ready}
             className="w-full bg-ink text-snow py-5 px-6 flex items-center justify-between
-                       transition-all duration-300 hover:bg-graphite disabled:bg-bone disabled:text-mist
-                       disabled:cursor-not-allowed group"
+                       transition-all duration-300 hover:bg-graphite
+                       disabled:bg-bone disabled:text-mist disabled:cursor-not-allowed group"
           >
             <span className="text-sm font-medium tracking-snug">
               {isScout ? `Scout Top 3 ${format} Sites` : "Analyze Location"}
             </span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
+            <ArrowRight
+              className="w-4 h-4 group-hover:translate-x-1 transition-transform"
+              strokeWidth={1.5}
+            />
           </button>
         </div>
       </motion.div>
 
-      {/* Bottom-left — context strip */}
+      {/* Bottom-left context strip */}
       <div className="absolute bottom-8 left-8 z-[1000] bg-paper/80 backdrop-blur-sm px-3 py-2">
         <div className="flex items-center gap-3 text-graphite">
           <Navigation className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span className="label-xs">CITY OF MINNEAPOLIS · 87 NEIGHBORHOODS · 232 CENSUS TRACTS</span>
+          <span className="label-xs">
+            CITY OF MINNEAPOLIS · 87 NEIGHBORHOODS · 232 CENSUS TRACTS
+          </span>
         </div>
       </div>
     </div>
