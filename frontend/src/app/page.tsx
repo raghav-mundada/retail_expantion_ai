@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import AgentTrace from "@/components/AgentTrace";
 import ScoreCard from "@/components/ScoreCard";
 import BrandSelector from "@/components/BrandSelector";
+import HistoryPanel from "@/components/HistoryPanel";
 import {
   getCandidates,
   getCompetitors,
@@ -90,7 +91,7 @@ export default function Home() {
         lat: target.lat,
         lng: target.lng,
         retailer,
-        radius_miles: 10,
+        radius_miles: 5,
         region_city: "Phoenix, AZ",
       },
       (event) => setTraceEvents((prev) => [...prev, event]),
@@ -336,6 +337,16 @@ export default function Home() {
             <AgentTrace events={traceEvents} isRunning={isAnalyzing} />
           </div>
         )}
+
+        {/* History panel — always visible at bottom of sidebar */}
+        <div style={{ padding: "0 4px 20px" }}>
+          <HistoryPanel
+            onReplay={(entry) => {
+              // Pan map to the historical location
+              setDroppedPin({ lat: entry.lat, lng: entry.lng });
+            }}
+          />
+        </div>
       </aside>
     </div>
   );

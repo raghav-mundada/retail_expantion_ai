@@ -149,7 +149,7 @@ async def run_orchestrator(
     # Run the four Phase 1 agents, interleaving events manually
     demo_iter = run_demographics_agent(lat, lng, radius_miles).__aiter__()
     comp_iter = run_competitor_agent(lat, lng, radius_miles, brand_dna.display_name).__aiter__()
-    school_iter = run_schools_agent(lat, lng, None).__aiter__()
+    school_iter = run_schools_agent(lat, lng).__aiter__()
     hotspot_iter = run_hotspot_agent(lat, lng, region_city, primary_cat).__aiter__()
 
     demo_result_data: dict = {}
@@ -185,19 +185,42 @@ async def run_orchestrator(
             except StopAsyncIteration:
                 agents_done[name] = True
 
-    # Reconstruct Phase 1 models
+    # Reconstruct Phase 1 models — ALWAYS produce non-None objects
+    demographics = None
     try:
-        demographics = DemographicsProfile(**demo_result_data)
-    except Exception:
-        from app.services.census_service import get_demographics_for_location
-        demographics = get_demographics_for_location(lat, lng, radius_miles)
+        if demo_result_data:
+            demographics = DemographicsProfile(**demo_result_data)
+    except Exception as e:
+        print(f"[Orchestrator] DemographicsProfile rebuild failed: {e}")
 
+    if demographics is None:
+        try:
+            from app.services.census_service import get_demographics_for_location
+            demographics = get_demographics_for_location(lat, lng, radius_miles)
+        except Exception as e2:
+            print(f"[Orchestrator] Census fallback failed: {e2}")
+            from app.services.census_service import _synthetic_demographics
+            demographics = _synthetic_demographics(lat, lng, radius_miles)
+
+    competitors = None
     try:
-        stores = [CompetitorStore(**s) for s in comp_result_data.get("stores", [])]
-        competitors = CompetitorProfile(**{**comp_result_data, "stores": stores})
-    except Exception:
-        from app.services.osm_service import get_competitor_profile
-        competitors = get_competitor_profile(lat, lng, radius_miles, brand_dna.display_name)
+        if comp_result_data:
+            stores = [CompetitorStore(**s) for s in comp_result_data.get("stores", [])]
+            competitors = CompetitorProfile(**{**comp_result_data, "stores": stores})
+    except Exception as e:
+        print(f"[Orchestrator] CompetitorProfile rebuild failed: {e}")
+
+    if competitors is None:
+        try:
+            from app.services.osm_service import get_competitor_profile
+            competitors = get_competitor_profile(lat, lng, radius_miles, brand_dna.display_name)
+        except Exception as e2:
+            print(f"[Orchestrator] OSM fallback failed: {e2}")
+            competitors = CompetitorProfile(
+                stores=[], total_count=0, big_box_count=0, same_category_count=0,
+                saturation_score=50.0, demand_signal_score=60.0,
+                competition_score=60.0, underserved=True,
+            )
 
     try:
         neighborhood = NeighborhoodProfile(**{k: v for k, v in neighborhood_data.items() if k != "district_name"})
@@ -320,3 +343,36 @@ async def run_orchestrator(
         ),
         "data": result.model_dump(),
     }
+
+    # ── Persist to Supabase (async, non-blocking) ─────────────────────────
+    try:
+        from app.services.supabase_service import save_analysis
+        score_dict = score.model_dump()
+        save_payload = {
+            "lat": lat,
+            "lng": lng,
+            "address": address_label,
+            "retailer_name": display_name,
+            "retailer_profile": retailer.model_dump(),
+            "overall_score": score.total_score,
+            "recommendation": score.rank_label,
+            "score_breakdown": {
+                "demand":       score_dict.get("demand_score"),
+                "competition":  score_dict.get("competition_score"),
+                "access":       score_dict.get("access_score"),
+                "neighborhood": score_dict.get("neighborhood_score"),
+                "brand_fit":    score_dict.get("brand_fit_score"),
+                "risk":         score_dict.get("risk_score"),
+                "hotspot":      score_dict.get("hotspot_score"),
+                "amenity":      score_dict.get("amenity_score"),
+            },
+            "hotspot_score": score_dict.get("hotspot_score"),
+            "competitor_count": competitors.total_count if competitors else 0,
+            "population": demographics.population if demographics else None,
+            "median_income": demographics.median_income if demographics else None,
+            "region_city": region_city,
+        }
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, save_analysis, save_payload)
+    except Exception as e:
+        print(f"[Supabase] Background save failed: {e}")

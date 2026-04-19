@@ -288,3 +288,28 @@ export function streamAnalysis(
 
   return () => controller.abort();
 }
+
+// ── History ───────────────────────────────────────────────────────────────────
+
+export interface HistoryEntry {
+  id: string;
+  created_at: string;
+  lat: number;
+  lng: number;
+  address: string;
+  retailer_name: string;
+  overall_score: number;
+  recommendation: string;
+  hotspot_score: number | null;
+  competitor_count: number;
+  population: number | null;
+  median_income: number | null;
+  region_city: string;
+}
+
+export async function fetchHistory(limit = 20): Promise<HistoryEntry[]> {
+  const resp = await fetch(`${API_BASE}/history?limit=${limit}`);
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  return data.analyses ?? [];
+}

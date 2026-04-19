@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "retailiq/new_store_opening_intelligence",
+  "title": "New Store Opening Intelligence",
+  "description": "TinyFish Layer 1 schema — detects new retail stores that have recently opened OR are opening soon in a target area, then evaluates whether that co-tenancy pattern signals a good location for opening a similar store. Logic: if Trader Joe's just opened nearby, grocery demand is validated. If a 5th Subway just opened, the area is saturated.",
+
+  "_tinyfish_agent_goal": "You are a retail site selection analyst. For the target city/neighborhood, find ALL new store openings from the past 6 months AND announced future openings. For each, determine: (1) Is this a demand validator (proves the area has viable retail demand for this category)? (2) Is this a saturation signal (so many stores of the same type that a new entrant would struggle)? (3) Is the opening a reaction to organic demand (proof consumers already exist) or speculative (first mover risk)? Return structured data. Be specific — include store names, addresses if available, and opening dates.",
+
+  "_tinyfish_search_queries": [
+    "\"[CITY]\" \"[CATEGORY]\" \"now open\" OR \"grand opening\" OR \"opening soon\" 2024 2025",
+    "\"[CITY]\" new retail store opening announcement 2025 site:businessinsider.com OR site:Reuters.com OR site:prnewswire.com",
+    "\"[CITY]\" \"[STORE NAME]\" new location opening 2025",
+    "site:loopnet.com \"[CITY]\" retail lease signed OR \"new tenant\" 2025"
+  ],
+
+  "_tinyfish_fetch_targets": [
+    "https://www.yelp.com/search?find_desc=[CATEGORY]&find_loc=[CITY]&sortby=date_desc",
+    "https://www.loopnet.com/search/commercial-real-estate/[CITY-SLUG]/for-lease/"
+  ],
+
+  "type": "object",
+  "required": ["site_recommendation", "new_store_openings"],
+  "properties": {
+
+    "site_recommendation": {
+      "type": "object",
+      "description": "Top-level verdict: given the new store activity, is this a GOOD or BAD place to open YOUR store?",
+      "required": ["verdict", "confidence", "reasoning"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["strong_yes", "yes", "neutral", "caution", "no"],
+          "description": "strong_yes = multiple validators, high demand, low saturation. no = already oversaturated or wrong demographic."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How confident is this verdict? 0.9+ = clear signal, 0.5 = mixed signals, 0.3 = insufficient data."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "2–4 sentence explanation. E.g.: 'Whole Foods + Trader Joe's both opened within a year = premium grocery demand validated. Your mid-range grocery store would capture the gap between them. However, 3 existing Krogers create price competition risk.'"
+        },
+        "demand_validation_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "How strongly do the new openings PROVE that consumer demand exists for this category? 80+ = multiple large retailers committing capital here."
+        },
+        "saturation_risk_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "How saturated is this specific retail category in this area? 70+ = too many competitors already."
+        }
+      }
+    },
+
+    "new_store_openings": {
+      "type": "array",
+      "description": "All new stores that have opened or announced openings in the past 6 months.",
+      "items": {
+        "type": "object",
+        "required": ["brand_name", "category", "status"],
+        "properties": {
+          "brand_name": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["grocery", "general_merchandise", "pharmacy", "apparel", "electronics", "hardware", "restaurant", "fitness", "specialty", "liquor", "other"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "opening_soon", "under_construction", "announced", "rumored"]
+          },
+          "opened_or_opening_date": { "type": "string" },
+          "address_or_area": { "type": "string" },
+          "store_size_category": {
+            "type": "string",
+            "enum": ["small", "medium", "large", "big_box", "unknown"]
+          },
+          "is_demand_validator": {
+            "type": "boolean",
+            "description": "true if this opening proves there is consumer demand for this retail category in the area"
+          },
+          "is_direct_competitor": {
+            "type": "boolean",
+            "description": "true if this store would directly compete with the retailer being analyzed"
+          },
+          "co_tenancy_attractiveness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How much does having this store nearby HELP your store? 0.9 = Trader Joe's next to your organic cafe is great. 0.1 = direct competitor hurts you."
+          },
+          "source_url": { "type": "string" },
+          "source_headline": { "type": "string" }
+        }
+      }
+    },
+
+    "opening_velocity": {
+      "type": "object",
+      "description": "Rate of new store openings — fast velocity = growing market.",
+      "properties": {
+        "openings_last_30_days": { "type": "integer" },
+        "openings_last_90_days": { "type": "integer" },
+        "openings_last_6_months": { "type": "integer" },
+        "closures_last_6_months": { "type": "integer" },
+        "net_new_stores": {
+          "type": "integer",
+          "description": "openings_last_6_months minus closures_last_6_months. Positive = growing market."
+        },
+        "velocity_label": {
+          "type": "string",
+          "enum": ["boom", "growth", "stable", "contraction", "collapse"],
+          "description": "boom=5+ net new/month, growth=2-4, stable=0-1, contraction=negative, collapse=many closures"
+        }
+      }
+    },
+
+    "category_saturation_map": {
+      "type": "object",
+      "description": "How saturated is each retail category in this area? Key = category name, Value = saturation (0-100).",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "example": {
+        "grocery": 72,
+        "fitness": 45,
+        "pharmacy": 88,
+        "apparel": 30
+      }
+    },
+
+    "whitespace_opportunities": {
+      "type": "array",
+      "description": "Retail categories that have DEMAND signals but NO or FEW new openings = untapped opportunity.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": { "type": "string" },
+          "opportunity_score": { "type": "number", "minimum": 0, "maximum": 100 },
+          "evidence": { "type": "string", "description": "Why is this a whitespace? E.g. 'Lots of young families moving in, but no Target or Walmart within 8 miles'" }
+        }
+      }
+    }
+  }
+}

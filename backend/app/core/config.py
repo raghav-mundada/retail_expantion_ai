@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from functools import lru_cache
 
 
@@ -8,15 +9,15 @@ class Settings(BaseSettings):
     tinyfish_api_key: str = ""
     environment: str = "development"
 
-    # Phoenix metro bounding box
-    metro_name: str = "Phoenix, AZ"
-    metro_state_fips: str = "04"
-    metro_county_fips: str = "013"  # Maricopa County
+    # Supabase (optional — for result persistence)
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_key: str = ""
 
     # Default analysis radius in miles
-    default_radius_miles: float = 10.0
+    default_radius_miles: float = 5.0
 
-    model_config = {"env_file": ".env"}
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
 
 @lru_cache()

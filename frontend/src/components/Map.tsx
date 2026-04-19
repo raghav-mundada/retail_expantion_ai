@@ -130,17 +130,18 @@ export default function MapComponent({
 
       // Competitor markers
       competitors.forEach((store) => {
-        const brandKey = store.brand_name.toLowerCase().replace(/\s+/g, "_");
+        const name = store.brand_name || store.name || "Unknown";
+        const brandKey = name.toLowerCase().replace(/\s+/g, "_");
         const color =
           BRAND_COLORS[
             Object.keys(BRAND_COLORS).find((k) =>
-              store.brand_name.toLowerCase().includes(k)
+              name.toLowerCase().includes(k)
             ) || "other"
           ] || "#6b7280";
         const letter =
           BRAND_EMOJI[
             Object.keys(BRAND_EMOJI).find((k) =>
-              store.brand_name.toLowerCase().includes(k)
+              name.toLowerCase().includes(k)
             ) || "other"
           ] || "R";
 

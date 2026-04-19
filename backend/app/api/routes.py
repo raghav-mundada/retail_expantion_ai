@@ -152,5 +152,13 @@ async def health():
         "status": "ok",
         "service": "RetailIQ API",
         "version": "2.0.0",
-        "features": ["brand_resolver", "hotspot_agent", "amenity_agent", "universal_retailer"],
+        "features": ["brand_resolver", "hotspot_agent", "amenity_agent", "universal_retailer", "history"],
     }
+
+
+@router.get("/history")
+async def get_history(limit: int = 20):
+    """Return recent analyses from Supabase for the history panel."""
+    from app.services.supabase_service import get_recent_analyses
+    analyses = get_recent_analyses(limit=limit)
+    return {"analyses": analyses, "count": len(analyses)}

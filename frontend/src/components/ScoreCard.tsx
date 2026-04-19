@@ -1,5 +1,6 @@
 "use client";
 import type { AnalysisResult } from "@/lib/api";
+import ScoreExplainer from "@/components/ScoreExplainer";
 import {
   RadarChart,
   Radar,
@@ -168,6 +169,11 @@ export default function ScoreCard({ result, brand }: ScoreCardProps) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Score Explainer dropdown */}
+      <div style={{ padding: "0 14px" }}>
+        <ScoreExplainer result={result} />
       </div>
 
       {/* TinyFish Hotspot Panel */}

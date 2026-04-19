@@ -1,0 +1,733 @@
+{
+  "query": {
+    "lat": 45.601,
+    "lon": -95.098,
+    "radius_km": 10.0,
+    "radius_m": 10000.0,
+    "fetched_at": "2026-04-18T22:52:20.112104+00:00"
+  },
+  "demographics": {
+    "error": "No tracts found",
+    "tracts": []
+  },
+  "competitor_stores": {
+    "count": 0,
+    "stores": []
+  },
+  "commercial_parcels": {
+    "error": "No parcels found",
+    "count": 0,
+    "parcels": []
+  },
+  "schools": {
+    "count": 0,
+    "schools": []
+  },
+  "traffic_aadt": {
+    "error": "geopandas not installed",
+    "count": 0,
+    "points": []
+  },
+  "neighborhoods": {
+    "total_count": 87,
+    "in_radius_count": 0,
+    "neighborhoods": [
+      {
+        "neighborhood_id": "1",
+        "neighborhood_name": "Shingle Creek",
+        "centroid_lat": 45.048415,
+        "centroid_lon": -93.30889,
+        "dist_km": 152.769,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "3",
+        "neighborhood_name": "Victory",
+        "centroid_lat": 45.034781,
+        "centroid_lon": -93.314431,
+        "dist_km": 153.005,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "8",
+        "neighborhood_name": "Humboldt Industrial Area",
+        "centroid_lat": 45.040693,
+        "centroid_lon": -93.30734,
+        "dist_km": 153.235,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "5",
+        "neighborhood_name": "Cleveland",
+        "centroid_lat": 45.017146,
+        "centroid_lon": -93.314296,
+        "dist_km": 153.851,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "2",
+        "neighborhood_name": "Lind - Bohanon",
+        "centroid_lat": 45.042272,
+        "centroid_lon": -93.289459,
+        "dist_km": 154.441,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "4",
+        "neighborhood_name": "Webber - Camden",
+        "centroid_lat": 45.031933,
+        "centroid_lon": -93.296139,
+        "dist_km": 154.442,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "6",
+        "neighborhood_name": "Folwell",
+        "centroid_lat": 45.018121,
+        "centroid_lon": -93.299903,
+        "dist_km": 154.826,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "24",
+        "neighborhood_name": "Jordan",
+        "centroid_lat": 45.006417,
+        "centroid_lon": -93.305144,
+        "dist_km": 155.018,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "26",
+        "neighborhood_name": "Willard - Hay",
+        "centroid_lat": 44.997188,
+        "centroid_lon": -93.309749,
+        "dist_km": 155.144,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "9",
+        "neighborhood_name": "Camden Industrial",
+        "centroid_lat": 45.032292,
+        "centroid_lon": -93.282695,
+        "dist_km": 155.385,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "50",
+        "neighborhood_name": "Bryn - Mawr",
+        "centroid_lat": 44.973605,
+        "centroid_lon": -93.312621,
+        "dist_km": 156.121,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "7",
+        "neighborhood_name": "McKinley",
+        "centroid_lat": 45.018233,
+        "centroid_lon": -93.280757,
+        "dist_km": 156.182,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "28",
+        "neighborhood_name": "Harrison",
+        "centroid_lat": 44.980611,
+        "centroid_lon": -93.305063,
+        "dist_km": 156.297,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "11",
+        "neighborhood_name": "Columbia Park",
+        "centroid_lat": 45.029647,
+        "centroid_lon": -93.269597,
+        "dist_km": 156.443,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "13",
+        "neighborhood_name": "Marshall Terrace",
+        "centroid_lat": 45.021312,
+        "centroid_lon": -93.274479,
+        "dist_km": 156.484,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "49",
+        "neighborhood_name": "West Maka Ska",
+        "centroid_lat": 44.94457,
+        "centroid_lon": -93.324873,
+        "dist_km": 156.773,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "25",
+        "neighborhood_name": "Hawthorne",
+        "centroid_lat": 45.006175,
+        "centroid_lon": -93.27999,
+        "dist_km": 156.811,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "41",
+        "neighborhood_name": "Cedar - Isles - Dean",
+        "centroid_lat": 44.953612,
+        "centroid_lon": -93.316771,
+        "dist_km": 156.86,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "27",
+        "neighborhood_name": "Near - North",
+        "centroid_lat": 44.993323,
+        "centroid_lon": -93.287572,
+        "dist_km": 156.898,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "29",
+        "neighborhood_name": "Sumner - Glenwood",
+        "centroid_lat": 44.985076,
+        "centroid_lon": -93.291999,
+        "dist_km": 156.993,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "42",
+        "neighborhood_name": "Kenwood",
+        "centroid_lat": 44.959819,
+        "centroid_lon": -93.309555,
+        "dist_km": 157.041,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "14",
+        "neighborhood_name": "Bottineau",
+        "centroid_lat": 45.009228,
+        "centroid_lon": -93.270915,
+        "dist_km": 157.309,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "43",
+        "neighborhood_name": "Lowry Hill",
+        "centroid_lat": 44.967446,
+        "centroid_lon": -93.294625,
+        "dist_km": 157.693,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "17",
+        "neighborhood_name": "Sheridan",
+        "centroid_lat": 45.002138,
+        "centroid_lon": -93.269426,
+        "dist_km": 157.754,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "44",
+        "neighborhood_name": "East Isles",
+        "centroid_lat": 44.955495,
+        "centroid_lon": -93.300997,
+        "dist_km": 157.86,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "86",
+        "neighborhood_name": "North Loop",
+        "centroid_lat": 44.985732,
+        "centroid_lon": -93.276256,
+        "dist_km": 158.069,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "69",
+        "neighborhood_name": "Linden Hills",
+        "centroid_lat": 44.927109,
+        "centroid_lon": -93.318318,
+        "dist_km": 158.156,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "15",
+        "neighborhood_name": "Holland",
+        "centroid_lat": 45.010727,
+        "centroid_lon": -93.255785,
+        "dist_km": 158.313,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "21",
+        "neighborhood_name": "St. Anthony West",
+        "centroid_lat": 44.993095,
+        "centroid_lon": -93.267493,
+        "dist_km": 158.328,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "45",
+        "neighborhood_name": "Lowry Hill East",
+        "centroid_lat": 44.957271,
+        "centroid_lon": -93.29181,
+        "dist_km": 158.41,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "46",
+        "neighborhood_name": "East Bde Maka Ska",
+        "centroid_lat": 44.943329,
+        "centroid_lon": -93.302136,
+        "dist_km": 158.414,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "31",
+        "neighborhood_name": "Loring Park",
+        "centroid_lat": 44.969091,
+        "centroid_lon": -93.279226,
+        "dist_km": 158.689,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "87",
+        "neighborhood_name": "Downtown West",
+        "centroid_lat": 44.978831,
+        "centroid_lon": -93.269345,
+        "dist_km": 158.897,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "18",
+        "neighborhood_name": "Logan Park",
+        "centroid_lat": 45.003627,
+        "centroid_lon": -93.252073,
+        "dist_km": 158.914,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "34",
+        "neighborhood_name": "Nicollet Island - East Bank",
+        "centroid_lat": 44.988368,
+        "centroid_lon": -93.261451,
+        "dist_km": 158.985,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "12",
+        "neighborhood_name": "Waite Park",
+        "centroid_lat": 45.026759,
+        "centroid_lon": -93.23582,
+        "dist_km": 158.992,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "72",
+        "neighborhood_name": "Fulton",
+        "centroid_lat": 44.911293,
+        "centroid_lon": -93.318492,
+        "dist_km": 159.002,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "32",
+        "neighborhood_name": "Steven's Square - Loring Heights",
+        "centroid_lat": 44.964831,
+        "centroid_lon": -93.277573,
+        "dist_km": 159.02,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "47",
+        "neighborhood_name": "South Uptown",
+        "centroid_lat": 44.943486,
+        "centroid_lon": -93.292938,
+        "dist_km": 159.045,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "16",
+        "neighborhood_name": "Audubon Park",
+        "centroid_lat": 45.019587,
+        "centroid_lon": -93.237189,
+        "dist_km": 159.225,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "22",
+        "neighborhood_name": "St. Anthony East",
+        "centroid_lat": 44.995024,
+        "centroid_lon": -93.252914,
+        "dist_km": 159.266,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "70",
+        "neighborhood_name": "East Harriet",
+        "centroid_lat": 44.929306,
+        "centroid_lon": -93.299191,
+        "dist_km": 159.359,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "51",
+        "neighborhood_name": "Whittier",
+        "centroid_lat": 44.955747,
+        "centroid_lon": -93.277452,
+        "dist_km": 159.49,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "19",
+        "neighborhood_name": "Windom Park",
+        "centroid_lat": 45.010323,
+        "centroid_lon": -93.234559,
+        "dist_km": 159.844,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "53",
+        "neighborhood_name": "Lyndale",
+        "centroid_lat": 44.942753,
+        "centroid_lon": -93.280752,
+        "dist_km": 159.93,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "33",
+        "neighborhood_name": "Elliot Park",
+        "centroid_lat": 44.968566,
+        "centroid_lon": -93.261081,
+        "dist_km": 159.989,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "23",
+        "neighborhood_name": "Beltrami",
+        "centroid_lat": 44.994216,
+        "centroid_lon": -93.242058,
+        "dist_km": 160.075,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "88",
+        "neighborhood_name": "Downtown East",
+        "centroid_lat": 44.976894,
+        "centroid_lon": -93.252251,
+        "dist_km": 160.197,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "90",
+        "neighborhood_name": "Phillips West",
+        "centroid_lat": 44.953461,
+        "centroid_lon": -93.268937,
+        "dist_km": 160.202,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "35",
+        "neighborhood_name": "Marcy Holmes",
+        "centroid_lat": 44.984083,
+        "centroid_lon": -93.247163,
+        "dist_km": 160.204,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "66",
+        "neighborhood_name": "Armatage",
+        "centroid_lat": 44.897595,
+        "centroid_lon": -93.31094,
+        "dist_km": 160.272,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "73",
+        "neighborhood_name": "Lynnhurst",
+        "centroid_lat": 44.911612,
+        "centroid_lon": -93.297375,
+        "dist_km": 160.434,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "20",
+        "neighborhood_name": "Northeast Park",
+        "centroid_lat": 45.004098,
+        "centroid_lon": -93.229269,
+        "dist_km": 160.514,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "89",
+        "neighborhood_name": "Ventura Village",
+        "centroid_lat": 44.963639,
+        "centroid_lon": -93.256561,
+        "dist_km": 160.554,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "71",
+        "neighborhood_name": "King Field",
+        "centroid_lat": 44.928439,
+        "centroid_lon": -93.28156,
+        "dist_km": 160.625,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "54",
+        "neighborhood_name": "Central",
+        "centroid_lat": 44.941469,
+        "centroid_lon": -93.268691,
+        "dist_km": 160.836,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "91",
+        "neighborhood_name": "Midtown Phillips",
+        "centroid_lat": 44.953708,
+        "centroid_lon": -93.25842,
+        "dist_km": 160.925,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "85",
+        "neighborhood_name": "Mid - City Industrial",
+        "centroid_lat": 44.997733,
+        "centroid_lon": -93.223922,
+        "dist_km": 161.195,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "38",
+        "neighborhood_name": "Cedar Riverside",
+        "centroid_lat": 44.97087,
+        "centroid_lon": -93.241939,
+        "dist_km": 161.221,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "67",
+        "neighborhood_name": "Kenny",
+        "centroid_lat": 44.897108,
+        "centroid_lon": -93.296617,
+        "dist_km": 161.279,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "57",
+        "neighborhood_name": "Bryant",
+        "centroid_lat": 44.930171,
+        "centroid_lon": -93.268624,
+        "dist_km": 161.43,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "37",
+        "neighborhood_name": "Como",
+        "centroid_lat": 44.988235,
+        "centroid_lon": -93.226317,
+        "dist_km": 161.479,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "40",
+        "neighborhood_name": "University of Minnesota",
+        "centroid_lat": 44.973825,
+        "centroid_lon": -93.235826,
+        "dist_km": 161.507,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "65",
+        "neighborhood_name": "Tangletown",
+        "centroid_lat": 44.911581,
+        "centroid_lon": -93.281285,
+        "dist_km": 161.543,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "92",
+        "neighborhood_name": "East Phillips",
+        "centroid_lat": 44.954473,
+        "centroid_lon": -93.245349,
+        "dist_km": 161.802,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "74",
+        "neighborhood_name": "Regina",
+        "centroid_lat": 44.923631,
+        "centroid_lon": -93.26792,
+        "dist_km": 161.824,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "55",
+        "neighborhood_name": "Powderhorn Park",
+        "centroid_lat": 44.94074,
+        "centroid_lon": -93.25464,
+        "dist_km": 161.853,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "68",
+        "neighborhood_name": "Windom",
+        "centroid_lat": 44.896169,
+        "centroid_lon": -93.284482,
+        "dist_km": 162.161,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "58",
+        "neighborhood_name": "Bancroft",
+        "centroid_lat": 44.931062,
+        "centroid_lon": -93.25505,
+        "dist_km": 162.327,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "77",
+        "neighborhood_name": "Field",
+        "centroid_lat": 44.912524,
+        "centroid_lon": -93.26897,
+        "dist_km": 162.342,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "78",
+        "neighborhood_name": "Page",
+        "centroid_lat": 44.909962,
+        "centroid_lon": -93.269281,
+        "dist_km": 162.458,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "60",
+        "neighborhood_name": "Seward",
+        "centroid_lat": 44.959567,
+        "centroid_lon": -93.232234,
+        "dist_km": 162.466,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "56",
+        "neighborhood_name": "Corcoran",
+        "centroid_lat": 44.942736,
+        "centroid_lon": -93.239896,
+        "dist_km": 162.78,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "61",
+        "neighborhood_name": "Longfellow",
+        "centroid_lat": 44.951021,
+        "centroid_lon": -93.232491,
+        "dist_km": 162.878,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "39",
+        "neighborhood_name": "Prospect Park - East River Road",
+        "centroid_lat": 44.96667,
+        "centroid_lon": -93.218104,
+        "dist_km": 163.109,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "75",
+        "neighborhood_name": "Northrop",
+        "centroid_lat": 44.915638,
+        "centroid_lon": -93.255394,
+        "dist_km": 163.114,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "79",
+        "neighborhood_name": "Hale",
+        "centroid_lat": 44.912159,
+        "centroid_lon": -93.255031,
+        "dist_km": 163.324,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "59",
+        "neighborhood_name": "Standish",
+        "centroid_lat": 44.931027,
+        "centroid_lon": -93.236669,
+        "dist_km": 163.608,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "82",
+        "neighborhood_name": "Diamond Lake",
+        "centroid_lat": 44.896521,
+        "centroid_lon": -93.25983,
+        "dist_km": 163.834,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "76",
+        "neighborhood_name": "Ericsson",
+        "centroid_lat": 44.921069,
+        "centroid_lon": -93.231355,
+        "dist_km": 164.495,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "62",
+        "neighborhood_name": "Cooper",
+        "centroid_lat": 44.948803,
+        "centroid_lon": -93.208077,
+        "dist_km": 164.703,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "80",
+        "neighborhood_name": "Keewaydin",
+        "centroid_lat": 44.911151,
+        "centroid_lon": -93.235225,
+        "dist_km": 164.748,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "63",
+        "neighborhood_name": "Howe",
+        "centroid_lat": 44.936488,
+        "centroid_lon": -93.214773,
+        "dist_km": 164.856,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "83",
+        "neighborhood_name": "Wenonah",
+        "centroid_lat": 44.900089,
+        "centroid_lon": -93.237438,
+        "dist_km": 165.184,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "64",
+        "neighborhood_name": "Hiawatha",
+        "centroid_lat": 44.917659,
+        "centroid_lon": -93.206886,
+        "dist_km": 166.375,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "81",
+        "neighborhood_name": "Minnehaha",
+        "centroid_lat": 44.90973,
+        "centroid_lon": -93.208931,
+        "dist_km": 166.647,
+        "in_radius": false
+      },
+      {
+        "neighborhood_id": "84",
+        "neighborhood_name": "Morris Park",
+        "centroid_lat": 44.898988,
+        "centroid_lon": -93.215786,
+        "dist_km": 166.739,
+        "in_radius": false
+      }
+    ]
+  }
+}

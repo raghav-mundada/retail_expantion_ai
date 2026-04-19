@@ -13,7 +13,12 @@ from app.models.schemas import CompetitorStore, CompetitorProfile
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "../../data/cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Overpass mirrors — tried in order, moves to next on timeout/5xx
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 
 # Known big-box / superstore brands to monitor
 BIG_BOX_BRANDS = {
@@ -93,36 +98,39 @@ def fetch_competitors(lat: float, lng: float, radius_miles: float = 10.0) -> lis
     radius_m = radius_miles * 1609.34
     query = _build_overpass_query(lat, lng, radius_m)
 
-    try:
-        resp = requests.post(OVERPASS_URL, data={"data": query}, timeout=35)
-        resp.raise_for_status()
-        elements = resp.json().get("elements", [])
-        stores = []
-        for el in elements:
-            tags = el.get("tags", {})
-            name = tags.get("name", "Unknown")
-            # Get coordinates
-            if el.get("type") == "node":
-                elat, elng = el.get("lat", 0), el.get("lon", 0)
-            else:
-                center = el.get("center", {})
-                elat, elng = center.get("lat", 0), center.get("lon", 0)
-            if not elat or not elng:
-                continue
-            stores.append({
-                "name": name,
-                "brand": _normalize_brand(name),
-                "lat": elat,
-                "lng": elng,
-                "osm_id": str(el.get("id", "")),
-                "shop_type": tags.get("shop", "retail"),
-            })
-        with open(cache_file, "w") as f:
-            json.dump(stores, f)
-        return stores
-    except Exception as e:
-        print(f"[OSMService] Overpass error: {e}, using fallback data")
-        return _get_fallback_competitors(lat, lng)
+    for endpoint in OVERPASS_ENDPOINTS:
+        try:
+            resp = requests.post(endpoint, data={"data": query}, timeout=12)
+            resp.raise_for_status()
+            elements = resp.json().get("elements", [])
+            stores = []
+            for el in elements:
+                tags = el.get("tags", {})
+                name = tags.get("name", "Unknown")
+                if el.get("type") == "node":
+                    elat, elng = el.get("lat", 0), el.get("lon", 0)
+                else:
+                    center = el.get("center", {})
+                    elat, elng = center.get("lat", 0), center.get("lon", 0)
+                if not elat or not elng:
+                    continue
+                stores.append({
+                    "name": name,
+                    "brand": _normalize_brand(name),
+                    "lat": elat,
+                    "lng": elng,
+                    "osm_id": str(el.get("id", "")),
+                    "shop_type": tags.get("shop", "retail"),
+                })
+            with open(cache_file, "w") as f:
+                json.dump(stores, f)
+            return stores
+        except Exception as e:
+            print(f"[OSMService] {endpoint[:40]} error: {e}")
+            continue  # try next mirror
+
+    print("[OSMService] All Overpass endpoints failed, using fallback data")
+    return _get_fallback_competitors(lat, lng)
 
 
 def get_competitor_profile(lat: float, lng: float, radius_miles: float = 10.0, brand: str = "walmart") -> CompetitorProfile:

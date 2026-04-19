@@ -21,6 +21,7 @@ from app.services.tinyfish_service import (
     scrape_yelp_new_businesses,
     scrape_loopnet_listings,
     scrape_city_permits,
+    scrape_new_store_openings,
     _has_tinyfish_key,
 )
 from app.core.config import get_settings
@@ -29,11 +30,12 @@ settings = get_settings()
 
 # Weights for composite hotspot score
 _WEIGHTS = {
-    "news_signal": 0.25,       # recent news about openings/development
-    "yelp_momentum": 0.30,     # new Yelp businesses (most direct signal)
-    "permit_activity": 0.20,   # new commercial permits
-    "loopnet_supply": 0.15,    # available commercial spaces (development readiness)
-    "existing_density": 0.10,  # baseline OSM POI density bonus
+    "news_signal":     0.20,  # area hype + opening announcements
+    "yelp_momentum":   0.25,  # new Yelp businesses (direct demand signal)
+    "permit_activity": 0.15,  # new commercial permits (infrastructure building)
+    "loopnet_supply":  0.10,  # available commercial spaces (development readiness)
+    "opening_intel":   0.20,  # new store opening intelligence (co-tenancy / saturation)
+    "existing_density":0.10,  # baseline OSM POI density bonus
 }
 
 
@@ -186,31 +188,41 @@ async def run_hotspot_agent(
 
     # ── TinyFish-powered path ───────────────────────────────────────────────
     yield {"agent": "hotspot", "status": "running",
-           "message": "🕷️ TinyFish: searching news signals + Yelp new openings in parallel..."}
+           "message": "🕷️ TinyFish: searching hype signals, new store openings, Yelp + permits in parallel..."}
 
-    # Run all TinyFish calls in parallel
-    news_task = asyncio.create_task(search_news_signals(region_city, store_category))
-    yelp_task = asyncio.create_task(scrape_yelp_new_businesses(region_city, store_category))
-    loopnet_task = asyncio.create_task(scrape_loopnet_listings(region_city))
-    permit_task = asyncio.create_task(scrape_city_permits(region_city))
+    # Run all TinyFish calls in parallel (5 concurrent)
+    news_task      = asyncio.create_task(search_news_signals(region_city, store_category))
+    yelp_task      = asyncio.create_task(scrape_yelp_new_businesses(region_city, store_category))
+    loopnet_task   = asyncio.create_task(scrape_loopnet_listings(region_city))
+    permit_task    = asyncio.create_task(scrape_city_permits(region_city))
+    opening_task   = asyncio.create_task(scrape_new_store_openings(region_city, store_category))
 
     news_results = await news_task
     yield {"agent": "hotspot", "status": "running",
-           "message": f"📰 News signals: {len(news_results)} results found"}
+           "message": f"📰 News/hype signals: {len(news_results)} results (area trending + opening announcements)"}
 
     yelp_businesses = await yelp_task
     yield {"agent": "hotspot", "status": "running",
-           "message": f"⭐ Yelp new businesses: {len(yelp_businesses)} recently active"}
+           "message": f"⭐ Yelp: {len(yelp_businesses)} recently active businesses detected"}
 
     loopnet_data = await loopnet_task
     loopnet_count = loopnet_data.get("count", 0)
+    anchor_ready  = loopnet_data.get("anchor_ready_count", 0)
     yield {"agent": "hotspot", "status": "running",
-           "message": f"🏢 Loopnet: {loopnet_count} available commercial spaces"}
+           "message": f"🏢 Loopnet: {loopnet_count} available spaces ({anchor_ready} anchor-ready)"}
 
     permit_data = await permit_task
     permit_count = permit_data.get("recent_commercial", 0)
+    dev_level    = permit_data.get("development_activity_level", "unknown")
     yield {"agent": "hotspot", "status": "running",
-           "message": f"📋 Permit activity: {permit_count} recent commercial permits"}
+           "message": f"📋 Permit activity: {permit_count} commercial permits — {dev_level} development"}
+
+    opening_intel = await opening_task
+    site_verdict  = opening_intel.get("site_verdict", "neutral")
+    net_new       = opening_intel.get("net_new_stores", 0)
+    whitespace    = opening_intel.get("whitespace_categories", [])
+    yield {"agent": "hotspot", "status": "running",
+           "message": f"🏪 New store opening intel: verdict={site_verdict}, {net_new} net new stores, whitespace: {whitespace[:2]}"}
 
     # ── Score each dimension ────────────────────────────────────────────────
     news_score, news_signals = _score_news_signals(news_results, store_category)
@@ -218,32 +230,44 @@ async def run_hotspot_agent(
         yelp_businesses, store_category
     )
 
-    # Loopnet supply score: more listings = more available space = easier to build
-    loopnet_score = min(loopnet_count * 10, 80) if loopnet_count > 0 else 20
+    # Loopnet supply: more anchor-ready spaces = easier to build
+    loopnet_score = min((anchor_ready * 25) + (loopnet_count * 5), 80) if loopnet_count > 0 else 20
 
-    # Permit activity score
-    permit_score = min(permit_count * 8, 90) if permit_count > 0 else 25
+    # Permit activity score including tenant improvements
+    tenant_improvements = permit_data.get("tenant_improvement_count", 0)
+    permit_score = min((permit_count * 6) + (tenant_improvements * 10), 90) if permit_count > 0 else 25
 
-    # Existing area density bonus (small fixed component)
-    density_score = 55.0  # neutral baseline
+    # New store opening intel score: map verdict to score
+    _verdict_map = {"strong_yes": 90, "yes": 72, "neutral": 55, "caution": 35, "no": 20}
+    opening_score = _verdict_map.get(site_verdict, 55)
+    # Boost by demand validation, reduce by saturation
+    demand_val   = opening_intel.get("demand_validation_score", 50)
+    saturation   = opening_intel.get("saturation_risk_score", 50)
+    opening_score = min(max((opening_score + demand_val * 0.2 - saturation * 0.1), 0), 100)
+
+    density_score = 55.0
 
     # Weighted composite
     hotspot_score = (
-        news_score * _WEIGHTS["news_signal"]
-        + yelp_score * _WEIGHTS["yelp_momentum"]
-        + permit_score * _WEIGHTS["permit_activity"]
-        + loopnet_score * _WEIGHTS["loopnet_supply"]
-        + density_score * _WEIGHTS["existing_density"]
+        news_score    * _WEIGHTS["news_signal"]
+        + yelp_score  * _WEIGHTS["yelp_momentum"]
+        + permit_score* _WEIGHTS["permit_activity"]
+        + loopnet_score*_WEIGHTS["loopnet_supply"]
+        + opening_score*_WEIGHTS["opening_intel"]
+        + density_score*_WEIGHTS["existing_density"]
     )
 
     all_signals = sorted(news_signals + yelp_signals, key=lambda s: s.signal_strength, reverse=True)[:10]
 
-    # Narrative
+    opening_reasoning = opening_intel.get("reasoning", "")
     level = "very high" if hotspot_score >= 75 else "strong" if hotspot_score >= 60 else "moderate" if hotspot_score >= 40 else "low"
     narrative = (
-        f"{region_city} shows {level} retail momentum: {new_openings} recent openings detected, "
-        f"{loopnet_count} available spaces, {permit_count} recent commercial permits. "
-        f"Trending categories: {', '.join(trending_cats[:3]) or 'general retail'}."
+        f"{region_city} shows {level} retail momentum: {new_openings} recent Yelp openings, "
+        f"{loopnet_count} available spaces ({anchor_ready} anchor-ready), {permit_count} commercial permits ({dev_level}). "
+        f"New store opening verdict: {site_verdict}. "
+        + (f"{opening_reasoning} " if opening_reasoning else "")
+        + (f"Whitespace opportunities: {', '.join(whitespace[:3])}." if whitespace else "")
+        + f" Trending categories: {', '.join(trending_cats[:3]) or 'general retail'}."
     )
 
     hotspot = HotspotProfile(
