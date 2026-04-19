@@ -1,0 +1,133 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap");
+@import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  }
+  /* Tabular figures for all numbers — premium data feel */
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Custom scrollbar — subtle, premium */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+
+  /* Selection */
+  ::selection { background: #047857; color: white; }
+}
+
+@layer components {
+  .hairline-b { @apply border-b border-hairline; }
+  .hairline-t { @apply border-t border-hairline; }
+  .hairline   { @apply border border-hairline; }
+
+  .label-xs {
+    @apply font-mono text-[10px] uppercase tracking-[0.18em] text-slate;
+  }
+  .label-sm {
+    @apply font-mono text-[11px] uppercase tracking-[0.16em] text-graphite;
+  }
+
+  .display-xl {
+    @apply font-display text-[clamp(3rem,8vw,7rem)] leading-[0.95] tracking-tightest;
+  }
+  .display-lg {
+    @apply font-display text-[clamp(2.5rem,5vw,4.5rem)] leading-[0.95] tracking-tightest;
+  }
+  .display-md {
+    @apply font-display text-[clamp(2rem,3.5vw,3rem)] leading-[1] tracking-tightest;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-ink text-snow px-6 py-3 text-sm font-medium
+           transition-all duration-200 hover:bg-graphite
+           disabled:opacity-40 disabled:cursor-not-allowed
+           border border-ink rounded-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-snow text-ink px-6 py-3 text-sm font-medium
+           transition-all duration-200 hover:bg-bone
+           border border-hairline hover:border-ink rounded-none;
+  }
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2
+           bg-emerald text-snow px-6 py-3 text-sm font-medium
+           transition-all duration-200 hover:bg-emerald/90
+           border border-emerald rounded-none;
+  }
+
+  .card {
+    @apply bg-snow border border-hairline;
+  }
+
+  .input-bare {
+    @apply bg-transparent border-0 outline-none focus:ring-0
+           font-display text-4xl tabular text-ink placeholder:text-mist;
+  }
+}
+
+/* Leaflet override — make tiles feel premium and quiet */
+.leaflet-container {
+  background: #FAFAF9 !important;
+  font-family: "Geist", system-ui, sans-serif !important;
+}
+.leaflet-tile {
+  filter: grayscale(0.65) contrast(0.95) brightness(1.02);
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(255,255,255,0.6) !important;
+  padding: 2px 6px !important;
+}
+.leaflet-control-zoom {
+  border: 1px solid #E4E4E7 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.leaflet-control-zoom a {
+  background: white !important;
+  color: #0A0A0A !important;
+  border-radius: 0 !important;
+  font-weight: 300 !important;
+}
+.leaflet-control-zoom a:hover { background: #F5F5F4 !important; }
+
+/* Pulsing pin */
+.pin-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+  background: rgba(4, 120, 87, 0.25);
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Premium Leaflet tooltip — overrides the default cartoony bubble */
+.leaflet-tooltip.atlas-tooltip {
+  background: #FFFFFF !important;
+  border: 1px solid #E4E4E7 !important;
+  border-radius: 0 !important;
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,0.18) !important;
+  padding: 10px 12px !important;
+  font-family: "Geist", system-ui, sans-serif !important;
+  color: #0A0A0A !important;
+  white-space: nowrap;
+  max-width: 240px;
+  white-space: normal;
+}
+.leaflet-tooltip.atlas-tooltip::before {
+  border-top-color: #E4E4E7 !important;
+}
