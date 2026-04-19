@@ -5,9 +5,9 @@ Calls all 6 data sources in one shot and returns a single JSON output.
 
 Sources:
   1. ACS 5-Year  — Census tract demographics  (Census API + TIGERweb)
-  2. Overpass    — Competitor supermarkets nearby
+  2. Geoapify    — Competitor stores nearby
   3. Minneapolis — Commercial parcels + assessor data
-  4. Overpass    — Schools nearby
+  4. Geoapify    — Schools nearby
   5. MnDOT       — AADT traffic counts
   6. Minneapolis — Neighborhood boundaries + centroids
 
@@ -55,13 +55,11 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-
 import time
 
-# ── Name helpers ────────────────────────────────────────────────────────────
+# ── Name helpers ─────────────────────────────────────────────────────────────
 
 _TYPE_LABELS = {
-    # education.*
     "school"           : "School",
     "kindergarten"     : "Kindergarten",
     "college"          : "College",
@@ -70,7 +68,6 @@ _TYPE_LABELS = {
     "driving_school"   : "Driving School",
     "language_school"  : "Language School",
     "music_school"     : "Music School",
-    # commercial.*
     "supermarket"      : "Supermarket",
     "convenience"      : "Convenience Store",
     "department_store" : "Department Store",
@@ -82,7 +79,6 @@ _TYPE_LABELS = {
 
 
 def _humanize_type(category_leaf: str) -> str:
-    """Convert a Geoapify category leaf like 'supermarket' → 'Supermarket'."""
     if not category_leaf:
         return "Place"
     return _TYPE_LABELS.get(
@@ -92,7 +88,6 @@ def _humanize_type(category_leaf: str) -> str:
 
 
 def _clean(val):
-    """Normalize Geoapify string values (rejects None, 'null', empty)."""
     if val is None:
         return ""
     s = str(val).strip()
@@ -100,39 +95,25 @@ def _clean(val):
 
 
 def _derive_name(props: dict, type_label: str) -> str:
-    """
-    Build a human-friendly name when Geoapify doesn't return one.
-
-    Priority:
-      1. props['name'] (real name)
-      2. '{Type} on {street}'                 — e.g. 'School on North 17th Avenue'
-      3. '{Type} · {district|suburb|city}'    — e.g. 'School · Willard-Hay'
-      4. '{Type} near {formatted-address}'    — best effort
-      5. 'Unnamed {type}'                     — last resort
-    """
     name = _clean(props.get("name"))
     if name:
         return name
-
     street  = _clean(props.get("street")) or _clean(props.get("address_line1"))
     housenr = _clean(props.get("housenumber"))
     area    = _clean(props.get("district")) or _clean(props.get("suburb")) or _clean(props.get("city"))
-
     if street:
         loc = f"{housenr} {street}".strip() if housenr else street
         return f"{type_label} on {loc}"
     if area:
         return f"{type_label} · {area}"
-
     formatted = _clean(props.get("formatted"))
     if formatted:
         short = formatted.split(",")[0]
         return f"{type_label} near {short}"
-
     return f"Unnamed {type_label.lower()}"
 
 
-# ── Spatial helper ──────────────────────────────────────────────────────────
+# ── Spatial helper ───────────────────────────────────────────────────────────
 
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -147,10 +128,6 @@ def haversine_km(lat1, lon1, lat2, lon2):
 # ── Geoapify helper with retry ───────────────────────────────────────────────
 
 def _geoapify_query(lat: float, lon: float, radius_km: float, categories: str) -> list:
-    """
-    Send a query to the Geoapify Places API with automatic retry on 429/500 errors.
-    Returns the list of feature elements, or empty list on final failure.
-    """
     api_key = os.environ.get("GEOAPIFY_API_KEY")
     if not api_key:
         log.warning("  GEOAPIFY_API_KEY not found in environment (.env). Returning empty list.")
@@ -160,10 +137,10 @@ def _geoapify_query(lat: float, lon: float, radius_km: float, categories: str) -
     params = {
         "categories": categories,
         "filter": f"circle:{lon},{lat},{int(radius_km * 1000)}",
-        "limit": 500, # Max allowed per request
+        "limit": 500,
         "apiKey": api_key,
     }
-    
+
     delays = [2, 5, 10]
     retries = 3
 
@@ -175,10 +152,8 @@ def _geoapify_query(lat: float, lon: float, radius_km: float, categories: str) -
                 log.warning(f"  Geoapify {r.status_code} — retrying in {wait}s (attempt {attempt}/{retries})")
                 time.sleep(wait)
                 continue
-
             r.raise_for_status()
             return r.json().get("features", [])
-
         except requests.exceptions.RequestException as e:
             if attempt < retries:
                 wait = delays[attempt - 1]
@@ -191,7 +166,7 @@ def _geoapify_query(lat: float, lon: float, radius_km: float, categories: str) -
     return []
 
 
-# ── Source 1: ACS Demographics ──────────────────────────────────────────────
+# ── Source 1: ACS Demographics ───────────────────────────────────────────────
 
 def pull_demographics(lat, lon, radius_km):
     log.info("[1/6] ACS Demographics...")
@@ -200,8 +175,8 @@ def pull_demographics(lat, lon, radius_km):
         if tract_meta.empty:
             return {"error": "No tracts found", "tracts": []}
 
-        acs_raw  = fetch_acs_for_tracts(tract_meta)
-        df       = clean_demographics(acs_raw, tract_meta)
+        acs_raw = fetch_acs_for_tracts(tract_meta)
+        df      = clean_demographics(acs_raw, tract_meta)
 
         summary = {
             "tract_count"              : len(df),
@@ -218,14 +193,14 @@ def pull_demographics(lat, lon, radius_km):
             "total_population", "total_households", "median_hh_income",
             "owner_share", "renter_share", "poverty_rate",
         ]].fillna("null").to_dict(orient="records")
-        
+
         return {"summary": summary, "tracts": tracts}
     except Exception as e:
         log.error(f"  Demographics failed: {e}")
         return {"error": str(e), "tracts": []}
 
 
-# ── Source 2: Competitor Stores (Geoapify) ──────────────────────────────────
+# ── Source 2: Competitor Stores (Geoapify) ───────────────────────────────────
 
 RIVAL_TYPES = {
     "grocery":          {"supermarket", "convenience", "department_store", "food_and_drink", "bakery"},
@@ -235,6 +210,7 @@ RIVAL_TYPES = {
     "department_store": {"department_store", "supermarket"},
     "default":          {"supermarket", "convenience", "department_store", "chemist", "food_and_drink", "bakery"},
 }
+
 
 def pull_competitor_stores(lat, lon, radius_km, store_type="grocery"):
     log.info("[2/6] Competitor stores (Geoapify)...")
@@ -251,25 +227,27 @@ def pull_competitor_stores(lat, lon, radius_km, store_type="grocery"):
         stores = []
         for f in features:
             props = f.get("properties", {})
-            geom = f.get("geometry", {}).get("coordinates", [None, None])
+            geom  = f.get("geometry", {}).get("coordinates", [None, None])
             slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
 
+            # ── KEY FIX: only look at commercial.* categories ──
             categories_list = props.get("categories") or []
-            shop_leaf  = categories_list[-1].split(".")[-1] if categories_list else "store"
+            commercial_cats = [c for c in categories_list if c.startswith("commercial.")]
+            shop_leaf  = commercial_cats[-1].split(".")[-1] if commercial_cats else "store"
             type_label = _humanize_type(shop_leaf)
             derived    = _derive_name(props, type_label)
 
             stores.append({
-                "place_id"   : props.get("place_id"),
-                "name"       : derived,
-                "shop_type"  : shop_leaf,
-                "lat"        : slat,
-                "lon"        : slon,
-                "dist_km"    : dist_km,
-                "address"    : _clean(props.get("address_line1")) or _clean(props.get("formatted")) or None,
-                "street"     : _clean(props.get("street")) or None,
-                "district"   : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
+                "place_id" : props.get("place_id"),
+                "name"     : derived,
+                "shop_type": shop_leaf,
+                "lat"      : slat,
+                "lon"      : slon,
+                "dist_km"  : dist_km,
+                "address"  : _clean(props.get("address_line1")) or _clean(props.get("formatted")) or None,
+                "street"   : _clean(props.get("street")) or None,
+                "district" : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
             })
 
         # Filter to only actual rivals for this store type
@@ -282,6 +260,7 @@ def pull_competitor_stores(lat, lon, radius_km, store_type="grocery"):
     except Exception as e:
         log.error(f"  Stores failed: {e}")
         return {"error": str(e), "count": 0, "stores": []}
+
 
 # ── Source 3: Commercial Parcels ─────────────────────────────────────────────
 
@@ -297,10 +276,10 @@ def pull_parcels(lat, lon, radius_km):
         df          = clean_parcels(comm_df, assessor_df)
 
         summary = {
-            "total_count"           : len(df),
+            "total_count"            : len(df),
             "retail_compatible_count": int(df["is_retail_compatible"].sum()),
-            "avg_parcel_acres"      : round(float(df["parcel_acres"].mean()), 3),
-            "max_parcel_acres"      : round(float(df["parcel_acres"].max()), 3),
+            "avg_parcel_acres"       : round(float(df["parcel_acres"].mean()), 3),
+            "max_parcel_acres"       : round(float(df["parcel_acres"].max()), 3),
             "commercial_type_breakdown": df["commercial_type"].value_counts().to_dict(),
         }
 
@@ -324,12 +303,12 @@ def pull_schools(lat, lon, radius_km):
     log.info("[4/6] Schools (Geoapify)...")
     try:
         categories = "education.school,education.college,education.university"
-        features = _geoapify_query(lat, lon, radius_km, categories)
+        features   = _geoapify_query(lat, lon, radius_km, categories)
 
         schools = []
         for f in features:
             props = f.get("properties", {})
-            geom = f.get("geometry", {}).get("coordinates", [None, None])
+            geom  = f.get("geometry", {}).get("coordinates", [None, None])
             slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
 
@@ -339,14 +318,14 @@ def pull_schools(lat, lon, radius_km):
             derived      = _derive_name(props, type_label)
 
             schools.append({
-                "place_id"   : props.get("place_id"),
-                "name"       : derived,
+                "place_id"    : props.get("place_id"),
+                "name"        : derived,
                 "amenity_type": amenity_leaf,
-                "lat"        : slat,
-                "lon"        : slon,
-                "dist_km"    : dist_km,
-                "street"     : _clean(props.get("street")) or None,
-                "district"   : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
+                "lat"         : slat,
+                "lon"         : slon,
+                "dist_km"     : dist_km,
+                "street"      : _clean(props.get("street")) or None,
+                "district"    : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
             })
 
         schools.sort(key=lambda x: x["dist_km"] or 999)
@@ -369,7 +348,6 @@ def pull_traffic(lat, lon, radius_km):
 
         aadt_dir = PROJECT_ROOT / "aadt_data"
 
-        # Download shapefile only if not already cached
         if not aadt_dir.exists() or not any(aadt_dir.glob("*.shp")):
             log.info("  Downloading MnDOT AADT shapefile...")
             url = (
@@ -394,17 +372,16 @@ def pull_traffic(lat, lon, radius_km):
             .copy()
             .sort_values("distance_m")
         )
-        nearby_wgs = nearby.to_crs(epsg=4326)
 
         if nearby.empty:
             return {"error": "No AADT points in radius", "count": 0, "points": []}
 
         summary = {
-            "count"        : len(nearby),
-            "nearest_road" : str(nearby.iloc[0].get("STREET_NAM", "Unknown")),
-            "nearest_aadt" : int(nearby.iloc[0].get("CURRENT_VO", 0)),
-            "max_aadt"     : int(nearby["CURRENT_VO"].max()),
-            "avg_aadt"     : round(float(nearby["CURRENT_VO"].mean()), 0),
+            "count"       : len(nearby),
+            "nearest_road": str(nearby.iloc[0].get("STREET_NAM", "Unknown")),
+            "nearest_aadt": int(nearby.iloc[0].get("CURRENT_VO", 0)),
+            "max_aadt"    : int(nearby["CURRENT_VO"].max()),
+            "avg_aadt"    : round(float(nearby["CURRENT_VO"].mean()), 0),
         }
 
         points = []
@@ -413,13 +390,21 @@ def pull_traffic(lat, lon, radius_km):
             wgs_geom = gpd.GeoDataFrame(
                 geometry=[geom], crs="EPSG:3857"
             ).to_crs(epsg=4326).geometry[0]
+
+            street = str(row.get("STREET_NAM", ""))
+            aadt   = int(row.get("CURRENT_VO", 0))
+
+            # Skip rows with no street name or zero traffic
+            if not street or street.lower() in ("nan", "none", "", "unknown") or aadt == 0:
+                continue
+
             points.append({
-                "street_name" : str(row.get("STREET_NAM", "")),
-                "route_label" : str(row.get("ROUTE_LABE", "")),
-                "aadt"        : int(row.get("CURRENT_VO", 0)),
-                "distance_m"  : round(float(row["distance_m"]), 0),
-                "lat"         : round(wgs_geom.y, 6),
-                "lon"         : round(wgs_geom.x, 6),
+                "street_name": street,
+                "route_label": str(row.get("ROUTE_LABE", "")),
+                "aadt"       : aadt,
+                "distance_m" : round(float(row["distance_m"]), 0),
+                "lat"        : round(wgs_geom.y, 6),
+                "lon"        : round(wgs_geom.x, 6),
             })
 
         log.info(f"  {len(nearby)} AADT points, nearest: {summary['nearest_road']} ({summary['nearest_aadt']:,} veh/day)")
@@ -441,7 +426,6 @@ def pull_neighborhoods(lat, lon, radius_km):
         features, _ = fetch_neighborhoods()
         df          = build_dataframe(features)
 
-        # Flag which neighborhoods are within radius
         def dist(row):
             if row["centroid_lat"] and row["centroid_lon"]:
                 return round(haversine_km(lat, lon, row["centroid_lat"], row["centroid_lon"]), 3)
@@ -490,7 +474,6 @@ def run_all(lat: float, lon: float, radius_km: float, out_path: Path = None, sto
         "neighborhoods"     : pull_neighborhoods(lat, lon, radius_km),
     }
 
-    # Save JSON
     if out_path is None:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_path = OUTPUT_DIR / f"retail_data_{lat}_{lon}_{radius_km}km.json"
@@ -510,16 +493,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Pull all retail expansion data sources into one JSON."
     )
-    parser.add_argument("--lat",    type=float, default=44.977,  help="Center latitude  (default: Minneapolis)")
-    parser.add_argument("--lon",    type=float, default=-93.265, help="Center longitude (default: Minneapolis)")
-    parser.add_argument("--radius", type=float, default=10.0,    help="Radius in km     (default: 10)")
+    parser.add_argument("--lat",    type=float, default=44.977,  help="Center latitude")
+    parser.add_argument("--lon",    type=float, default=-93.265, help="Center longitude")
+    parser.add_argument("--radius", type=float, default=10.0,    help="Radius in km")
     parser.add_argument("--out",    type=str,   default=None,    help="Custom output JSON path")
     args = parser.parse_args()
 
-    out = Path(args.out) if args.out else None
+    out  = Path(args.out) if args.out else None
     data = run_all(lat=args.lat, lon=args.lon, radius_km=args.radius, out_path=out)
 
-    # Print a clean summary to stdout
     print("\n" + "=" * 65)
     print("SUMMARY")
     print("=" * 65)
