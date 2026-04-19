@@ -207,7 +207,7 @@ export function MapPicker({ onAnalyze }: Props) {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute bottom-8 right-8 z-[1000] w-[440px]"
+        className="absolute top-8 right-8 z-[1000] w-[440px]"
       >
         <div className="bg-snow border border-hairline shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] overflow-hidden">
 
