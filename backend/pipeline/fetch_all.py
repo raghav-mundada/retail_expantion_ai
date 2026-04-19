@@ -138,14 +138,13 @@ def pull_demographics(lat, lon, radius_km):
             "avg_owner_share"          : round(float(df["owner_share"].mean()), 4),
             "avg_renter_share"         : round(float(df["renter_share"].mean()), 4),
         }
-
         tracts = df[[
             "tract_geoid", "NAME",
             "centroid_lat", "centroid_lon", "dist_km",
             "total_population", "total_households", "median_hh_income",
             "owner_share", "renter_share", "poverty_rate",
         ]].fillna("null").to_dict(orient="records")
-
+        
         return {"summary": summary, "tracts": tracts}
     except Exception as e:
         log.error(f"  Demographics failed: {e}")
