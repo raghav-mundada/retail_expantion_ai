@@ -1,0 +1,1364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Atlas — Investor Deck</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+  /* ─────────── Atlas design tokens (mirrors frontend/tailwind.config.js) ─────────── */
+  :root {
+    --ink:       #0A0A0A;
+    --graphite:  #3F3F46;
+    --slate:     #71717A;
+    --mist:      #A1A1AA;
+    --hairline:  #E4E4E7;
+    --bone:      #F5F5F4;
+    --paper:     #FAFAF9;
+    --snow:      #FFFFFF;
+    --emerald:   #047857;
+    --amber:     #B45309;
+    --crimson:   #B91C1C;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01","ss02","cv01","cv02";
+  }
+
+  .tabular { font-variant-numeric: tabular-nums; }
+  .mono    { font-family: "Geist Mono", ui-monospace, monospace; }
+  .serif   { font-family: "Instrument Serif", Georgia, serif; letter-spacing: -0.04em; line-height: 0.95; }
+
+  .label-xs {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--slate);
+  }
+
+  /* ─────────── Header (mirrors PhaseHeader.tsx) ─────────── */
+  header.atlas {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 64px;
+    background: rgba(250,250,249,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px;
+    z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark { width: 28px; height: 28px; display: block; }
+  .brand-text {
+    font-family: "Instrument Serif", serif;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .brand-tag { color: var(--slate); margin-left: 8px; }
+
+  .phase-nav {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px;
+  }
+  .phase-nav .ph {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    color: var(--mist);
+    transition: color .25s ease;
+    cursor: pointer;
+  }
+  .phase-nav .ph .num {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+  }
+  .phase-nav .ph.done   { color: var(--graphite); }
+  .phase-nav .ph.active { color: var(--ink); }
+  .phase-nav .ph.active .num { color: var(--emerald); }
+  .phase-nav .sep { color: var(--mist); margin: 0 2px; }
+
+  .hdr-right {
+    display: flex; align-items: center; gap: 16px;
+    color: var(--slate);
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--emerald);
+    animation: pulse 2.4s cubic-bezier(0,0,.2,1) infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.4); }
+  }
+
+  /* ─────────── Slides container ─────────── */
+  main.deck {
+    position: fixed; inset: 64px 0 56px 0;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    padding: 48px 80px 36px;
+    display: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .slide::-webkit-scrollbar { width: 4px; }
+  .slide::-webkit-scrollbar-thumb { background: #d4d4d8; }
+  .slide.active { display: flex; flex-direction: column; animation: fadeUp .55s cubic-bezier(0.16,1,0.3,1) both; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-inner { max-width: 1400px; margin: 0 auto; height: 100%; width: 100%; display: flex; flex-direction: column; }
+
+  .eyebrow {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 20px;
+  }
+  .eyebrow .num {
+    font-family: "Geist Mono", monospace;
+    font-size: 12px;
+    color: var(--emerald);
+    letter-spacing: 0.16em;
+  }
+  .eyebrow .lbl {
+    font-family: "Geist Mono", monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--graphite);
+  }
+  .eyebrow hr {
+    flex: 1;
+    border: 0;
+    border-top: 1px solid var(--hairline);
+  }
+
+  h1.headline {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(2.6rem, 4.4vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    margin-bottom: 20px;
+    max-width: 22ch;
+  }
+  h1.headline.cover-h {
+    font-size: clamp(3.2rem, 5.6vw, 5.4rem);
+    line-height: 0.98;
+    max-width: 20ch;
+  }
+  h1.headline em { font-style: italic; color: var(--emerald); }
+  h1.headline .light { color: var(--mist); font-style: italic; }
+
+  h2.subhead {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+    margin-bottom: 16px;
+    max-width: 26ch;
+    color: var(--graphite);
+  }
+
+  p.lede {
+    max-width: 64ch;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--graphite);
+  }
+
+  /* ─────────── Cards / hairline grids ─────────── */
+  .grid { display: grid; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  .grid > div { background: var(--snow); padding: 18px 22px; }
+
+  .card {
+    background: var(--snow);
+    border: 1px solid var(--hairline);
+    padding: 20px 24px;
+  }
+
+  .stat-num {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(1.4rem, 2.2vw, 2rem);
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+  }
+  .stat-num .unit { font-size: 0.5em; color: var(--slate); margin-left: 4px; }
+  .stat-cap {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--slate);
+    margin-top: 6px;
+  }
+
+  .versus-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 32px;
+    align-items: stretch;
+  }
+  .vs-pill {
+    align-self: center;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--mist);
+  }
+
+  .strike { text-decoration: line-through; text-decoration-thickness: 1.5px; text-decoration-color: var(--crimson); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--hairline);
+    background: var(--bone);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--graphite);
+  }
+  .badge.go    { background: rgba(4,120,87,0.08);   color: var(--emerald); border-color: rgba(4,120,87,0.25); }
+  .badge.warn  { background: rgba(180,83,9,0.08);   color: var(--amber);   border-color: rgba(180,83,9,0.25); }
+  .badge.risk  { background: rgba(185,28,28,0.08);  color: var(--crimson); border-color: rgba(185,28,28,0.25); }
+
+  /* ─────────── Footer / nav controls ─────────── */
+  footer.atlas {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 56px;
+    border-top: 1px solid var(--hairline);
+    background: rgba(250,250,249,0.92);
+    backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px;
+    z-index: 100;
+  }
+  .nav-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid var(--hairline);
+    background: var(--snow);
+    color: var(--ink);
+    font-family: "Geist", sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .nav-btn:hover:not(:disabled) { background: var(--ink); color: var(--snow); border-color: var(--ink); }
+  .nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .nav-btn.primary {
+    background: var(--ink); color: var(--snow); border-color: var(--ink);
+  }
+  .nav-btn.primary:hover { background: var(--graphite); }
+
+  .progress {
+    display: flex; align-items: center; gap: 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--slate);
+  }
+  .progress-bar {
+    width: 240px; height: 2px;
+    background: var(--hairline);
+    position: relative;
+  }
+  .progress-bar > span {
+    position: absolute; top: 0; left: 0;
+    height: 100%;
+    background: var(--emerald);
+    transition: width .4s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  /* ─────────── Specific slide layouts ─────────── */
+
+  /* Slide 1 — problem */
+  .vs3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 32px;
+  }
+  .vs3 > div { background: var(--snow); padding: 32px 28px; }
+  .vs3 .who {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--slate);
+    margin-bottom: 18px;
+  }
+  .vs3 .price {
+    font-family: "Instrument Serif", serif;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.045em;
+  }
+  .vs3 .time {
+    font-family: "Instrument Serif", serif;
+    font-size: 26px;
+    color: var(--graphite);
+    font-style: italic;
+    margin-top: 14px;
+    line-height: 1;
+  }
+  .vs3 .you {
+    margin-top: 22px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--graphite);
+  }
+  .vs3 .atlas-cell {
+    background: var(--ink);
+    color: var(--snow);
+  }
+  .vs3 .atlas-cell .who { color: var(--mist); }
+  .vs3 .atlas-cell .price { color: var(--snow); }
+  .vs3 .atlas-cell .price em { color: #34d399; font-style: normal; }
+  .vs3 .atlas-cell .time { color: var(--mist); }
+  .vs3 .atlas-cell .you  { color: var(--mist); }
+
+  .src-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 28px;
+  }
+  .src-grid > div { background: var(--snow); padding: 22px 26px; min-height: 110px; }
+  .src-grid .src-name { font-size: 16px; font-weight: 500; color: var(--ink); line-height: 1.3; }
+  .src-grid .src-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-top: 12px;
+    line-height: 1.4;
+  }
+  .src-grid .src-tag.gov { color: var(--emerald); }
+  .src-grid .more-cell { background: var(--ink); grid-column: span 2; }
+  .src-grid .more-cell .src-name { color: var(--snow); font-style: italic; font-family: "Instrument Serif", serif; font-size: 28px; letter-spacing: -0.02em; }
+  .src-grid .more-cell .src-tag  { color: var(--mist); margin-top: 16px; }
+
+  /* Slide 2 — process */
+  .step-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-top: 36px;
+  }
+  .step {
+    border: 1px solid var(--hairline);
+    background: var(--snow);
+    padding: 32px 30px;
+    position: relative;
+  }
+  .step .step-num {
+    font-family: "Instrument Serif", serif;
+    font-size: 56px;
+    line-height: 1;
+    color: var(--mist);
+    margin-bottom: 12px;
+  }
+  .step.alive .step-num { color: var(--emerald); }
+  .step h3 {
+    font-family: "Instrument Serif", serif;
+    font-size: 28px;
+    letter-spacing: -0.03em;
+    margin-bottom: 14px;
+    line-height: 1;
+  }
+  .step p {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--graphite);
+  }
+  .step .arrow {
+    position: absolute;
+    right: -16px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--hairline);
+    font-size: 20px;
+  }
+
+  /* Slide 3 — metrics */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 28px;
+  }
+  .metric-grid > div { background: var(--snow); padding: 22px 26px; }
+  .metric-grid h4 {
+    font-family: "Instrument Serif", serif;
+    font-size: 24px;
+    letter-spacing: -0.025em;
+    margin-bottom: 8px;
+    line-height: 1.05;
+  }
+  .metric-grid .why {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--emerald);
+    margin-bottom: 8px;
+  }
+  .metric-grid p { font-size: 13.5px; color: var(--graphite); line-height: 1.55; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 32px;
+  }
+  .compare > div { background: var(--snow); padding: 16px 20px; font-size: 14px; line-height: 1.4; display: flex; align-items: center; }
+  .compare .head { background: var(--bone); font-family: "Geist Mono", monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--slate); }
+  .compare .head-atlas { background: var(--ink); color: var(--snow); font-family: "Instrument Serif", serif; font-size: 22px; letter-spacing: -0.03em; text-transform: none; }
+  .compare .yes { color: var(--emerald); font-weight: 600; font-size: 18px; justify-content: center; }
+  .compare .no  { color: var(--mist); justify-content: center; }
+  .compare .partial { color: var(--amber); font-family: "Geist Mono", monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; justify-content: center; }
+  .compare .row-l { font-weight: 500; }
+  .compare .atlas-cell-row { background: #FBFEFC; }
+
+  /* Slide 4 — pricing reveal (goofy) */
+  .price-stage {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+    align-items: center;
+    text-align: center;
+    margin-top: 32px;
+  }
+  .reveal-num {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(8rem, 18vw, 16rem);
+    line-height: 0.9;
+    letter-spacing: -0.05em;
+    position: relative;
+    display: inline-block;
+  }
+  .reveal-num .dollar { color: var(--emerald); font-style: italic; }
+  .reveal-strikes {
+    display: flex; gap: 32px; justify-content: center; flex-wrap: wrap;
+    color: var(--mist);
+    font-family: "Instrument Serif", serif;
+    font-size: 30px;
+  }
+  .reveal-strikes span {
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+  }
+  .joke {
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    font-size: 26px;
+    color: var(--graphite);
+    line-height: 1.35;
+    max-width: 42ch;
+    margin: 0 auto;
+  }
+  .price-stage { gap: 28px; margin-top: 12px; }
+
+  /* Slide 5 — vision */
+  .tier-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 28px;
+  }
+  .tier-row > div { background: var(--snow); padding: 28px 30px; position: relative; }
+  .tier-row .tier-name {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-bottom: 16px;
+  }
+  .tier-row .tier-price {
+    font-family: "Instrument Serif", serif;
+    font-size: 50px;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    margin-bottom: 10px;
+  }
+  .tier-row .tier-sub { font-size: 13.5px; color: var(--graphite); margin-bottom: 18px; line-height: 1.45; }
+  .tier-row ul { list-style: none; padding: 0; }
+  .tier-row li { font-size: 13px; color: var(--graphite); padding: 9px 0; border-top: 1px dashed var(--hairline); line-height: 1.45; }
+  .tier-row li::before { content: "·"; color: var(--emerald); margin-right: 8px; font-weight: bold; }
+  .tier-row .featured { background: var(--ink); color: var(--snow); }
+  .tier-row .featured .tier-name { color: var(--mist); }
+  .tier-row .featured .tier-price { color: var(--snow); }
+  .tier-row .featured .tier-price em { color: #34d399; font-style: normal; }
+  .tier-row .featured .tier-sub { color: var(--mist); }
+  .tier-row .featured li { color: var(--mist); border-color: rgba(255,255,255,0.1); }
+
+  .vision-arrow {
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 20px;
+    align-items: stretch;
+  }
+  .vision-arrow .stop {
+    border: 1px solid var(--hairline);
+    padding: 28px 28px;
+    background: var(--snow);
+  }
+  .vision-arrow .stop .who {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--emerald);
+    margin-bottom: 14px;
+  }
+  .vision-arrow .stop .what {
+    font-family: "Instrument Serif", serif;
+    font-size: 24px;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+  }
+  .vision-arrow .arrow {
+    align-self: center;
+    color: var(--mist);
+    font-family: "Geist Mono", monospace;
+    font-size: 22px;
+  }
+  .vision-arrow .arrow {
+    color: var(--mist);
+    font-family: "Geist Mono", monospace;
+    font-size: 18px;
+  }
+
+  /* Slide 6 — memory */
+  .feature-row {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 56px;
+    margin-top: 32px;
+    align-items: start;
+  }
+  .mock-history {
+    border: 1px solid var(--hairline);
+    background: var(--snow);
+    box-shadow: 0 20px 40px -25px rgba(0,0,0,0.18);
+  }
+  .mock-history .mh-head {
+    border-bottom: 1px solid var(--hairline);
+    padding: 12px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .mock-history .mh-title { font-family: "Instrument Serif", serif; font-size: 20px; letter-spacing: -0.02em; }
+  .mock-history .mh-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--slate);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .mock-history .mh-row {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--hairline);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .mock-history .mh-row:hover { background: var(--bone); }
+  .mock-history .mh-row:last-child { border-bottom: 0; }
+  .mock-history .mh-row .top { font-size: 15px; font-weight: 500; }
+  .mock-history .mh-row .bot { font-size: 11px; color: var(--slate); margin-top: 5px; font-family: "Geist Mono", monospace; letter-spacing: 0.06em; }
+  .mock-history .mh-score {
+    font-family: "Instrument Serif", serif;
+    font-size: 36px;
+    letter-spacing: -0.03em;
+    color: var(--emerald);
+  }
+  .mock-history .mh-title { font-family: "Instrument Serif", serif; font-size: 26px; letter-spacing: -0.02em; }
+
+  .feat-list { list-style: none; padding: 0; }
+  .feat-list li {
+    border-top: 1px solid var(--hairline);
+    padding: 22px 0;
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 20px;
+  }
+  .feat-list li:last-child { border-bottom: 1px solid var(--hairline); }
+  .feat-list .num {
+    font-family: "Instrument Serif", serif;
+    font-size: 28px;
+    color: var(--mist);
+    line-height: 1;
+  }
+  .feat-list h4 {
+    font-family: "Instrument Serif", serif;
+    font-size: 22px;
+    line-height: 1.15;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .feat-list p { font-size: 14px; color: var(--graphite); line-height: 1.55; }
+
+  /* ─────────── Cover (slide 0) ─────────── */
+  .cover {
+    height: 100%;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    padding: 0;
+    margin: -36px -64px -28px;
+  }
+  .cover-main {
+    padding: 56px 80px;
+    display: flex; flex-direction: column; justify-content: center;
+    max-width: 1400px; margin: 0 auto; width: 100%;
+  }
+  .cover-foot {
+    border-top: 1px solid var(--hairline);
+    background: var(--snow);
+    padding: 18px 80px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--slate);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* ─────────── Helpers ─────────── */
+  .row { display: flex; align-items: center; gap: 16px; }
+  .mt-8  { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .mt-32 { margin-top: 32px; }
+  .text-emerald { color: var(--emerald); }
+  .text-graphite { color: var(--graphite); }
+  .text-slate { color: var(--slate); }
+  .small { font-size: 12px; }
+
+  /* hide phase nav on small screens */
+  @media (max-width: 1100px) {
+    .phase-nav { display: none; }
+    .slide { padding: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ────────── HEADER ────────── -->
+<header class="atlas">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 28 28" fill="none">
+      <rect x="0.5" y="0.5" width="27" height="27" stroke="currentColor" stroke-width="1" />
+      <line x1="14" y1="0" x2="14" y2="28" stroke="currentColor" stroke-width="0.8" />
+      <line x1="0" y1="14" x2="28" y2="14" stroke="currentColor" stroke-width="0.8" />
+      <circle cx="14" cy="14" r="3" fill="#047857" />
+    </svg>
+    <div>
+      <span class="brand-text">Atlas</span>
+      <span class="label-xs brand-tag">Investor Brief</span>
+    </div>
+  </div>
+
+  <nav class="phase-nav" id="phaseNav"></nav>
+
+  <div class="hdr-right">
+    <span class="label-xs">MINNEAPOLIS · MN</span>
+    <span class="live-dot"></span>
+  </div>
+</header>
+
+<!-- ────────── SLIDES ────────── -->
+<main class="deck" id="deck">
+
+  <!-- ─── SLIDE 0 — COVER ─── -->
+  <section class="slide active" data-title="Atlas">
+    <div class="cover">
+      <div class="cover-main">
+        <div class="eyebrow">
+          <span class="num">00</span>
+          <span class="lbl">Brief · April 2026</span>
+          <hr />
+        </div>
+
+        <h1 class="headline cover-h">
+          Pick the next storefront <em>in ten seconds.</em>
+        </h1>
+
+        <p class="lede mt-16">
+          Atlas is a retail site-intelligence engine. Drop a pin or hand
+          us a search box; we return a quantified, sourced verdict on
+          whether to open there — built for everyone from a single-store
+          operator to an enterprise team that needs answers faster than
+          their procurement cycle allows.
+        </p>
+
+        <div class="row mt-24" style="gap: 24px;">
+          <span class="badge go">LIVE · MINNEAPOLIS</span>
+          <span class="label-xs">MN · 2026</span>
+        </div>
+      </div>
+
+      <div class="cover-foot">
+        <span>Atlas / Retail Site Intelligence</span>
+        <span>Press → to begin</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 1 — PROBLEM ─── -->
+  <section class="slide" data-title="Problem">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">01</span>
+        <span class="lbl">The Problem</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        Site decisions take <em>weeks</em> when they should take <em>seconds.</em>
+      </h1>
+
+      <p class="lede">
+        Today's site-intelligence options work — but only above a certain
+        budget threshold. Even teams that own a Placer or Esri seat skip
+        the deeper study on most decisions because the friction is too
+        high. Atlas closes the gap: same metrics, same data sources,
+        delivered before a coffee cools.
+      </p>
+
+      <div class="vs3">
+        <div>
+          <div class="who">Strategy Consulting</div>
+          <div class="price">$250K+</div>
+          <div class="time">6–12 weeks</div>
+          <div class="you">Right tool for major capital decisions — overkill for everything else.</div>
+        </div>
+
+        <div>
+          <div class="who">Enterprise Platforms</div>
+          <div class="price">$5K–$100K+</div>
+          <div class="time">Annual contracts</div>
+          <div class="you">Placer.ai, Esri, Buxton — best-in-class depth. Built for portfolio seats, not a single decision.</div>
+        </div>
+
+        <div class="atlas-cell">
+          <div class="who">Atlas</div>
+          <div class="price"><em>&lt; 10 sec</em></div>
+          <div class="time">$30 / search</div>
+          <div class="you">Same industry metrics, sourced &amp; transparent — the fast-pass layer for any team.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 1.5 — DATA SOURCES ─── -->
+  <section class="slide" data-title="Data">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">02</span>
+        <span class="lbl">The Data Behind the Verdict</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        20+ live integrations. <em>100% sourced.</em>
+      </h1>
+
+      <p class="lede">
+        Every number in an Atlas report traces back to a public dataset, a
+        commercial API, or a logged LLM debate. No proprietary black-box
+        scoring — every signal is auditable.
+      </p>
+
+      <div class="src-grid">
+        <div>
+          <div class="src-name">U.S. Census · ACS 5-Year</div>
+          <div class="src-tag gov">.gov · Demographics &amp; income</div>
+        </div>
+        <div>
+          <div class="src-name">Census TIGERweb</div>
+          <div class="src-tag gov">.gov · Tract geometries</div>
+        </div>
+        <div>
+          <div class="src-name">MnDOT AADT</div>
+          <div class="src-tag gov">.gov · Traffic counts</div>
+        </div>
+        <div>
+          <div class="src-name">Minneapolis Open Data</div>
+          <div class="src-tag gov">.gov · Parcels &amp; neighborhoods</div>
+        </div>
+        <div>
+          <div class="src-name">BLS Spending Indices</div>
+          <div class="src-tag gov">.gov · Wallet-share priors</div>
+        </div>
+        <div>
+          <div class="src-name">Geoapify · OpenAI · Supabase</div>
+          <div class="src-tag">Commercial · LLM · Infra</div>
+        </div>
+        <div class="more-cell">
+          <div class="src-name">+ 14 more</div>
+          <div class="src-tag">FCC · HUD · IRS SOI · OSM · Walk Score · NOAA · Crime · …</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 2 — PROCESS ─── -->
+  <section class="slide" data-title="Process">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">03</span>
+        <span class="lbl">The Three-Step Process</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        From a pin on a map to a defensible <em>verdict</em> — in three steps.
+      </h1>
+
+      <p class="lede mt-16">
+        The same pipeline a real-estate analyst would build by hand over a week,
+        compressed into a single click. Locate, ingest, decide.
+      </p>
+
+      <div class="step-row">
+        <div class="step alive">
+          <div class="step-num">01</div>
+          <h3>Locate</h3>
+          <p>
+            The operator drops a pin or hands Atlas a bounded search box.
+            Manual mode for existing leads, Auto-Scout for hunting fresh territory.
+          </p>
+          <div class="arrow">→</div>
+        </div>
+
+        <div class="step alive">
+          <div class="step-num">02</div>
+          <h3>Ingest</h3>
+          <p>
+            Twenty-plus government and commercial APIs fire in parallel — every
+            tract, parcel, school, traffic count, competitor and neighborhood
+            in the radius, persisted to Supabase as one immutable run.
+          </p>
+          <div class="arrow">→</div>
+        </div>
+
+        <div class="step alive">
+          <div class="step-num">03</div>
+          <h3>Decide</h3>
+          <p>
+            A multi-agent debate — Bull, Bear, Orchestrator — argues the case
+            on nine industry metrics and scores 0–100 with a transparent
+            line-by-line breakdown.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 3 — METRICS / COMPETITION ─── -->
+  <section class="slide" data-title="Metrics">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">04</span>
+        <span class="lbl">Industry Metrics — Same Math, Different Price</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        The same nine signals the incumbents use — <em>composited &amp; explainable.</em>
+      </h1>
+
+      <p class="lede">
+        We didn't invent these metrics — we packaged them. Atlas runs the
+        canonical nine signals every serious location-intelligence platform
+        runs, and shows you exactly how each one contributed to the score.
+      </p>
+
+      <div class="metric-grid">
+        <div>
+          <div class="why">Demand</div>
+          <h4>Trade-Area Population</h4>
+          <p>Total households inside the radius — the demand floor.</p>
+        </div>
+        <div>
+          <div class="why">Demand</div>
+          <h4>Effective Buying Power</h4>
+          <p>Income × spending propensity, adjusted for poverty rates.</p>
+        </div>
+        <div>
+          <div class="why">Demand</div>
+          <h4>Retail Demand Density</h4>
+          <p>EBP per square kilometer — how concentrated the wallet is.</p>
+        </div>
+        <div>
+          <div class="why">Capture</div>
+          <h4>Huff Gravity Model</h4>
+          <p>Probability a tract chooses you vs. each rival. Industry default since 1964.</p>
+        </div>
+        <div>
+          <div class="why">Capture</div>
+          <h4>Sales Forecast</h4>
+          <p>Captured households × per-household spend × category share.</p>
+        </div>
+        <div>
+          <div class="why">Capture</div>
+          <h4>ROI / Payback</h4>
+          <p>Annual operating profit divided by build + working-capital CapEx.</p>
+        </div>
+        <div>
+          <div class="why">Friction</div>
+          <h4>Traffic Accessibility</h4>
+          <p>AADT-weighted blend of nearest road, max in radius, and average flow.</p>
+        </div>
+        <div>
+          <div class="why">Friction</div>
+          <h4>Competitive Intensity</h4>
+          <p>Format-aware rival pressure — not raw POI count.</p>
+        </div>
+        <div>
+          <div class="why">Friction</div>
+          <h4>Income Fit</h4>
+          <p>Triangular fit on each tract's median, weighted by households.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 5 — HEAD-TO-HEAD ─── -->
+  <section class="slide" data-title="Head-to-Head">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">05</span>
+        <span class="lbl">How Atlas Stacks Up</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        Same depth. <em>None</em> of the friction.
+      </h1>
+
+      <p class="lede">
+        We respect the incumbents — they built this category. But every
+        capability below is in the box on day one, with no contract and
+        no sales call.
+      </p>
+
+      <div class="compare">
+        <div class="head">Capability</div>
+        <div class="head">Placer.ai</div>
+        <div class="head">Esri BA</div>
+        <div class="head">Buxton</div>
+        <div class="head head-atlas">Atlas</div>
+
+        <div class="row-l">Industry-standard metrics<br/><span style="color:var(--slate); font-size:11px;">Huff · EBP · TAP · AADT</span></div>
+        <div class="yes">✓</div>
+        <div class="yes">✓</div>
+        <div class="yes">✓</div>
+        <div class="yes atlas-cell-row">✓</div>
+
+        <div class="row-l">Transparent score breakdown<br/><span style="color:var(--slate); font-size:11px;">every input visible</span></div>
+        <div class="partial">Partial</div>
+        <div class="partial">Partial</div>
+        <div class="no">—</div>
+        <div class="yes atlas-cell-row">✓</div>
+
+        <div class="row-l">Multi-agent LLM debate<br/><span style="color:var(--slate); font-size:11px;">Bull · Bear · Orchestrator</span></div>
+        <div class="no">—</div>
+        <div class="no">—</div>
+        <div class="no">—</div>
+        <div class="yes atlas-cell-row">✓</div>
+
+        <div class="row-l">Self-serve sign-up<br/><span style="color:var(--slate); font-size:11px;">no procurement cycle</span></div>
+        <div class="no">Sales call</div>
+        <div class="no">Sales call</div>
+        <div class="no">Sales call</div>
+        <div class="yes atlas-cell-row">✓</div>
+
+        <div class="row-l">Time to first verdict</div>
+        <div class="no">Days</div>
+        <div class="no">Weeks</div>
+        <div class="no">Weeks</div>
+        <div class="yes atlas-cell-row">&lt; 10 sec</div>
+
+        <div class="row-l">Cost per single decision</div>
+        <div class="no">$10K+ seat</div>
+        <div class="no">$5K+ seat</div>
+        <div class="no">Custom</div>
+        <div class="yes atlas-cell-row">$30</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 6 — THE BIG QUESTION ─── -->
+  <section class="slide" data-title="The Big Question">
+    <div class="slide-inner" style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+      <div class="eyebrow">
+        <span class="num">06</span>
+        <span class="lbl">The Question Everyone's Been Avoiding</span>
+        <hr />
+      </div>
+
+      <div class="price-stage">
+        <div class="reveal-strikes">
+          <span>weeks of waiting</span>
+          <span>annual contracts</span>
+          <span>procurement cycles</span>
+        </div>
+
+        <div class="reveal-num">
+          <span class="dollar">$</span>30
+        </div>
+
+        <p class="joke">
+          Yes. Thirty dollars. Per decision. Less than the lunch
+          you'll order while waiting for the verdict.
+        </p>
+
+        <p class="label-xs" style="margin-top: 16px;">
+          ( Per market research · First two on the house · No seat fees · No procurement )
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 5 — PRICING & VISION ─── -->
+  <section class="slide" data-title="Pricing">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">07</span>
+        <span class="lbl">Pricing</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        Pay only when you <em>decide.</em> No retainer, no procurement.
+      </h1>
+
+      <p class="lede">
+        Atlas serves three audiences with one product: the operator who
+        couldn't afford site analysis before, the franchisee who needed
+        an answer this week, and the enterprise team that wants a
+        fast-pass layer on top of their existing platform investment.
+      </p>
+
+      <div class="tier-row">
+        <div>
+          <div class="tier-name">Trial</div>
+          <div class="tier-price">2 free</div>
+          <div class="tier-sub">Two complete site briefs, on us. No card.</div>
+          <ul>
+            <li>Full dashboard + AI debate</li>
+            <li>Save &amp; revisit forever</li>
+            <li>Cite sources publicly</li>
+          </ul>
+        </div>
+
+        <div class="featured">
+          <div class="tier-name">Operator</div>
+          <div class="tier-price"><em>$30</em><span style="font-size:0.4em; color: var(--mist); margin-left: 8px;">/ search</span></div>
+          <div class="tier-sub">Pay only when you decide. No retainer.</div>
+          <ul>
+            <li>Unlimited Auto-Scout candidates</li>
+            <li>Cached AI debate (re-run anytime)</li>
+            <li>Full history sync across devices</li>
+            <li>Export-ready investor PDF</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="tier-name">Enterprise</div>
+          <div class="tier-price">Talk to us</div>
+          <div class="tier-sub">Multi-market, custom verticals, white-label.</div>
+          <ul>
+            <li>Bulk run scheduling</li>
+            <li>Private model fine-tuning</li>
+            <li>Dedicated data integrations</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 5.5 — VISION ─── -->
+  <section class="slide" data-title="Vision">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">08</span>
+        <span class="lbl">The Vision</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        From the corner store <em>to the corner office.</em>
+      </h1>
+
+      <p class="lede">
+        We don't replace enterprise platforms — we live alongside them.
+        Most decisions never deserved a six-week study. That's where
+        Atlas wins, and that's how we earn the right to climb.
+      </p>
+
+      <div class="vision-arrow">
+        <div class="stop">
+          <div class="who">Today</div>
+          <div class="what">Independents &amp; franchisees who never had access.</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="stop">
+          <div class="who">Year One</div>
+          <div class="what">Regional chains &amp; PE-backed roll-ups closing the analytics gap.</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="stop">
+          <div class="who">Year Three</div>
+          <div class="what">Enterprise teams using Atlas as the fast-pass layer on every screening decision.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SLIDE 6 — MEMORY / HISTORY ─── -->
+  <section class="slide" data-title="Memory">
+    <div class="slide-inner">
+      <div class="eyebrow">
+        <span class="num">09</span>
+        <span class="lbl">Atlas Remembers — Every Search, Every Verdict</span>
+        <hr />
+      </div>
+
+      <h1 class="headline">
+        Atlas <em>remembers</em> — every search, every verdict, every source.
+      </h1>
+
+      <div class="feature-row">
+        <div class="mock-history">
+          <div class="mh-head">
+            <div class="mh-title">Your searches</div>
+            <span class="mh-tag">3 SAVED</span>
+          </div>
+          <div class="mh-row">
+            <div>
+              <div class="top">Whole Foods · Linden Hills</div>
+              <div class="bot">3.5 KM · APR 19, 2026 · CACHED</div>
+            </div>
+            <div class="mh-score">87</div>
+          </div>
+          <div class="mh-row">
+            <div>
+              <div class="top">Target · Northeast Minneapolis</div>
+              <div class="bot">5.0 KM · APR 18, 2026 · CACHED</div>
+            </div>
+            <div class="mh-score">72</div>
+          </div>
+          <div class="mh-row">
+            <div>
+              <div class="top">Coffee Shop · Uptown</div>
+              <div class="bot">2.0 KM · APR 17, 2026 · CACHED</div>
+            </div>
+            <div class="mh-score">64</div>
+          </div>
+        </div>
+
+        <div>
+          <ul class="feat-list">
+            <li>
+              <div class="num">01</div>
+              <div>
+                <h4>Sign in once. Sync forever.</h4>
+                <p>Google sign-in via Supabase Auth. Anonymous flow stays free; logged-in users get history across devices.</p>
+              </div>
+            </li>
+            <li>
+              <div class="num">02</div>
+              <div>
+                <h4>AI debates are cached.</h4>
+                <p>Re-opening a past run shows the verdict instantly. The LLM only re-runs when you explicitly ask for it.</p>
+              </div>
+            </li>
+            <li>
+              <div class="num">03</div>
+              <div>
+                <h4>Every run is auditable.</h4>
+                <p>Every metric, every data point, every agent message is persisted. Open a 3-week-old search and the score breakdown is identical.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="eyebrow mt-16">
+        <span class="num">·</span>
+        <span class="lbl">Thank you — questions welcome</span>
+        <hr />
+      </div>
+
+      <div class="row mt-8" style="justify-content: space-between;">
+        <div>
+          <div class="serif" style="font-size: 22px;">Atlas — Retail Site Intelligence</div>
+          <div class="label-xs mt-8">Minneapolis · 2026</div>
+        </div>
+        <div class="row" style="gap: 10px;">
+          <span class="badge go">LIVE DEMO READY</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ────────── FOOTER / CONTROLS ────────── -->
+<footer class="atlas">
+  <button class="nav-btn" id="prevBtn">← Previous</button>
+
+  <div class="progress">
+    <span id="curTitle">Atlas</span>
+    <div class="progress-bar"><span id="progressFill" style="width: 0%;"></span></div>
+    <span class="tabular"><span id="curIdx">01</span> / <span id="totalIdx">07</span></span>
+  </div>
+
+  <button class="nav-btn primary" id="nextBtn">Next →</button>
+</footer>
+
+<script>
+(() => {
+  const slides   = Array.from(document.querySelectorAll('.slide'));
+  const total    = slides.length;
+  const prevBtn  = document.getElementById('prevBtn');
+  const nextBtn  = document.getElementById('nextBtn');
+  const curIdx   = document.getElementById('curIdx');
+  const curTitle = document.getElementById('curTitle');
+  const totalEl  = document.getElementById('totalIdx');
+  const fill     = document.getElementById('progressFill');
+  const phaseNav = document.getElementById('phaseNav');
+
+  totalEl.textContent = String(total).padStart(2, '0');
+
+  // Build phase nav from slide titles (skipping cover)
+  const navItems = slides.slice(1).map((s, i) => ({
+    n: i + 1,
+    label: s.dataset.title,
+  }));
+  phaseNav.innerHTML = navItems.map((it, i) => `
+    <div class="ph" data-jump="${it.n}">
+      <span class="num">${String(it.n).padStart(2, '0')}</span>
+      <span>${it.label}</span>
+    </div>
+    ${i < navItems.length - 1 ? '<span class="sep">·</span>' : ''}
+  `).join('');
+
+  let cur = 0;
+
+  // Auto-fit any slide whose natural size slightly exceeds the viewport.
+  // Prevents both clipping and ugly scrollbars on smaller laptop screens.
+  function fitActive() {
+    const active = slides[cur];
+    if (!active) return;
+    const inner = active.querySelector('.slide-inner') || active.firstElementChild;
+    if (!inner) return;
+
+    inner.style.transform = 'none';
+    inner.style.transformOrigin = 'top center';
+
+    // Use requestAnimationFrame so layout has settled
+    requestAnimationFrame(() => {
+      const availH = active.clientHeight;
+      const naturalH = inner.scrollHeight;
+      if (naturalH > availH + 2) {
+        const scale = Math.max(0.72, availH / naturalH);
+        inner.style.transform = `scale(${scale})`;
+        // shrink the box height proportionally so the scaled box doesn't leave a void
+        inner.style.height = `${100 / scale}%`;
+        inner.style.width  = `${100 / scale}%`;
+      } else {
+        inner.style.height = '';
+        inner.style.width  = '';
+      }
+    });
+  }
+
+  function render() {
+    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+    curIdx.textContent = String(cur + 1).padStart(2, '0');
+    curTitle.textContent = slides[cur].dataset.title;
+    fill.style.width = `${((cur + 1) / total) * 100}%`;
+    prevBtn.disabled = cur === 0;
+    nextBtn.disabled = cur === total - 1;
+    nextBtn.textContent = cur === total - 1 ? '✓ End' : 'Next →';
+
+    // phase nav highlighting
+    phaseNav.querySelectorAll('.ph').forEach((el, i) => {
+      const n = parseInt(el.dataset.jump, 10);
+      el.classList.toggle('active', n === cur);
+      el.classList.toggle('done',   n < cur);
+    });
+
+    fitActive();
+  }
+
+  window.addEventListener('resize', () => fitActive());
+
+  function go(n) {
+    cur = Math.max(0, Math.min(total - 1, n));
+    render();
+  }
+
+  prevBtn.addEventListener('click', () => go(cur - 1));
+  nextBtn.addEventListener('click', () => go(cur + 1));
+
+  phaseNav.addEventListener('click', (e) => {
+    const el = e.target.closest('.ph');
+    if (el) go(parseInt(el.dataset.jump, 10));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(cur + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp')                { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End')  { e.preventDefault(); go(total - 1); }
+    else if (/^[0-9]$/.test(e.key)) {
+      const n = parseInt(e.key, 10);
+      if (n >= 0 && n < total) go(n);
+    }
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

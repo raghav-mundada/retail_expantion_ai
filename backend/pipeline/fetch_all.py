@@ -376,12 +376,31 @@ def pull_traffic(lat, lon, radius_km):
         if nearby.empty:
             return {"error": "No AADT points in radius", "count": 0, "points": []}
 
+        # MnDOT sometimes leaves STREET_NAM blank for ramps / unnamed segments.
+        # Walk the nearest rows until we find a real name; fall back to ROUTE_LABE
+        # (e.g. "I-35W") and finally "Unknown" so we never persist the literal "nan".
+        def _clean_road(val) -> str | None:
+            if val is None:
+                return None
+            s = str(val).strip()
+            if not s or s.lower() in ("nan", "none", "null"):
+                return None
+            return s
+
+        nearest_road = None
+        for _, row in nearby.iterrows():
+            nearest_road = _clean_road(row.get("STREET_NAM")) \
+                        or _clean_road(row.get("ROUTE_LABE"))
+            if nearest_road:
+                break
+        nearest_road = nearest_road or "Unknown"
+
         summary = {
-            "count"       : len(nearby),
-            "nearest_road": str(nearby.iloc[0].get("STREET_NAM", "Unknown")),
-            "nearest_aadt": int(nearby.iloc[0].get("CURRENT_VO", 0)),
-            "max_aadt"    : int(nearby["CURRENT_VO"].max()),
-            "avg_aadt"    : round(float(nearby["CURRENT_VO"].mean()), 0),
+            "count"        : len(nearby),
+            "nearest_road" : nearest_road,
+            "nearest_aadt" : int(nearby.iloc[0].get("CURRENT_VO", 0)),
+            "max_aadt"     : int(nearby["CURRENT_VO"].max()),
+            "avg_aadt"     : round(float(nearby["CURRENT_VO"].mean()), 0),
         }
 
         points = []
@@ -391,20 +410,20 @@ def pull_traffic(lat, lon, radius_km):
                 geometry=[geom], crs="EPSG:3857"
             ).to_crs(epsg=4326).geometry[0]
 
-            street = str(row.get("STREET_NAM", ""))
+            street = _clean_road(row.get("STREET_NAM"))
             aadt   = int(row.get("CURRENT_VO", 0))
 
-            # Skip rows with no street name or zero traffic
-            if not street or street.lower() in ("nan", "none", "", "unknown") or aadt == 0:
+            # Skip rows with no usable street name or zero traffic
+            if not street or aadt == 0:
                 continue
 
             points.append({
-                "street_name": street,
-                "route_label": str(row.get("ROUTE_LABE", "")),
-                "aadt"       : aadt,
-                "distance_m" : round(float(row["distance_m"]), 0),
-                "lat"        : round(wgs_geom.y, 6),
-                "lon"        : round(wgs_geom.x, 6),
+                "street_name" : street,
+                "route_label" : _clean_road(row.get("ROUTE_LABE")) or "",
+                "aadt"        : aadt,
+                "distance_m"  : round(float(row["distance_m"]), 0),
+                "lat"         : round(wgs_geom.y, 6),
+                "lon"         : round(wgs_geom.x, 6),
             })
 
         log.info(f"  {len(nearby)} AADT points, nearest: {summary['nearest_road']} ({summary['nearest_aadt']:,} veh/day)")
