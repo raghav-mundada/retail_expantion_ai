@@ -58,6 +58,80 @@ log = logging.getLogger(__name__)
 
 import time
 
+# ── Name helpers ────────────────────────────────────────────────────────────
+
+_TYPE_LABELS = {
+    # education.*
+    "school"           : "School",
+    "kindergarten"     : "Kindergarten",
+    "college"          : "College",
+    "university"       : "University",
+    "library"          : "Library",
+    "driving_school"   : "Driving School",
+    "language_school"  : "Language School",
+    "music_school"     : "Music School",
+    # commercial.*
+    "supermarket"      : "Supermarket",
+    "convenience"      : "Convenience Store",
+    "department_store" : "Department Store",
+    "discount_store"   : "Discount Store",
+    "marketplace"      : "Marketplace",
+    "shopping_mall"    : "Shopping Mall",
+    "warehouse_store"  : "Warehouse Store",
+}
+
+
+def _humanize_type(category_leaf: str) -> str:
+    """Convert a Geoapify category leaf like 'supermarket' → 'Supermarket'."""
+    if not category_leaf:
+        return "Place"
+    return _TYPE_LABELS.get(
+        category_leaf.lower(),
+        category_leaf.replace("_", " ").title(),
+    )
+
+
+def _clean(val):
+    """Normalize Geoapify string values (rejects None, 'null', empty)."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    return "" if s.lower() in ("", "null", "none", "unknown") else s
+
+
+def _derive_name(props: dict, type_label: str) -> str:
+    """
+    Build a human-friendly name when Geoapify doesn't return one.
+
+    Priority:
+      1. props['name'] (real name)
+      2. '{Type} on {street}'                 — e.g. 'School on North 17th Avenue'
+      3. '{Type} · {district|suburb|city}'    — e.g. 'School · Willard-Hay'
+      4. '{Type} near {formatted-address}'    — best effort
+      5. 'Unnamed {type}'                     — last resort
+    """
+    name = _clean(props.get("name"))
+    if name:
+        return name
+
+    street  = _clean(props.get("street")) or _clean(props.get("address_line1"))
+    housenr = _clean(props.get("housenumber"))
+    area    = _clean(props.get("district")) or _clean(props.get("suburb")) or _clean(props.get("city"))
+
+    if street:
+        loc = f"{housenr} {street}".strip() if housenr else street
+        return f"{type_label} on {loc}"
+    if area:
+        return f"{type_label} · {area}"
+
+    formatted = _clean(props.get("formatted"))
+    if formatted:
+        short = formatted.split(",")[0]
+        return f"{type_label} near {short}"
+
+    return f"Unnamed {type_label.lower()}"
+
+
 # ── Spatial helper ──────────────────────────────────────────────────────────
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -181,18 +255,21 @@ def pull_competitor_stores(lat, lon, radius_km, store_type="grocery"):
             slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
 
-            categories_list = props.get("categories", [])
-            commercial_cats = [c for c in categories_list if c.startswith("commercial.")]
-            shop_type = commercial_cats[-1].split(".")[-1] if commercial_cats else "Unknown"
+            categories_list = props.get("categories") or []
+            shop_leaf  = categories_list[-1].split(".")[-1] if categories_list else "store"
+            type_label = _humanize_type(shop_leaf)
+            derived    = _derive_name(props, type_label)
 
             stores.append({
-                "place_id" : props.get("place_id"),
-                "name"     : props.get("name", "Unknown"),
-                "shop_type": shop_type,
-                "lat"      : slat,
-                "lon"      : slon,
-                "dist_km"  : dist_km,
-                "address"  : props.get("address_line1") or props.get("formatted"),
+                "place_id"   : props.get("place_id"),
+                "name"       : derived,
+                "shop_type"  : shop_leaf,
+                "lat"        : slat,
+                "lon"        : slon,
+                "dist_km"    : dist_km,
+                "address"    : _clean(props.get("address_line1")) or _clean(props.get("formatted")) or None,
+                "street"     : _clean(props.get("street")) or None,
+                "district"   : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
             })
 
         # Filter to only actual rivals for this store type
@@ -255,17 +332,21 @@ def pull_schools(lat, lon, radius_km):
             geom = f.get("geometry", {}).get("coordinates", [None, None])
             slon, slat = geom[0], geom[1]
             dist_km = round(haversine_km(lat, lon, slat, slon), 3) if slat and slon else None
-            
-            categories_list = props.get("categories", ["Unknown"])
-            amenity_type = categories_list[-1].split(".")[-1] if categories_list else "Unknown"
+
+            categories_list = props.get("categories") or []
+            amenity_leaf = categories_list[-1].split(".")[-1] if categories_list else "school"
+            type_label   = _humanize_type(amenity_leaf)
+            derived      = _derive_name(props, type_label)
 
             schools.append({
                 "place_id"   : props.get("place_id"),
-                "name"       : props.get("name", "Unknown"),
-                "amenity_type": amenity_type,
+                "name"       : derived,
+                "amenity_type": amenity_leaf,
                 "lat"        : slat,
                 "lon"        : slon,
                 "dist_km"    : dist_km,
+                "street"     : _clean(props.get("street")) or None,
+                "district"   : _clean(props.get("district")) or _clean(props.get("suburb")) or None,
             })
 
         schools.sort(key=lambda x: x["dist_km"] or 999)

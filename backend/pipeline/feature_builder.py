@@ -148,7 +148,7 @@ def huff_probability(
         clon = c.get("lon") or c.get("longitude")
         if clat and clon:
             comp_data.append({
-                "name": c.get("name", "Unknown"),
+                "name": c.get("name") or "Unnamed competitor",
                 "dist": haversine_km(candidate_lat, candidate_lon, clat, clon),
             })
     comp_data.sort(key=lambda x: x["dist"])
@@ -259,7 +259,7 @@ def build_features(data: dict, new_store_config: dict = None) -> list:
             clon = c.get("lon") or c.get("longitude")
             if clat and clon:
                 comp_dists.append({
-                    "name": c.get("name", "Unknown"),
+                    "name": c.get("name") or "Unnamed competitor",
                     "dist": haversine_km(plat, plon, clat, clon),
                 })
         comp_dists.sort(key=lambda x: x["dist"])
