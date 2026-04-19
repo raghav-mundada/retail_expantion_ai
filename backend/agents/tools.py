@@ -2,18 +2,13 @@
 backend/agents/tools.py
 """
 
-import math
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.pipeline.feature_builder import (
-    build_features,
-    haversine_km,
-    huff_probability,
-)
+from backend.pipeline.feature_builder import build_features, haversine_km, huff_probability
 
 _fetched_data = {}
 
@@ -35,9 +30,9 @@ def geocode_neighborhood(neighborhood: str, city: str = "Minneapolis, MN") -> di
             return {"error": f"Could not geocode: {neighborhood}"}
         top = results[0]
         return {
-            "lat"          : float(top["lat"]),
-            "lon"          : float(top["lon"]),
-            "display_name" : top["display_name"],
+            "lat"         : float(top["lat"]),
+            "lon"         : float(top["lon"]),
+            "display_name": top["display_name"],
         }
     except Exception as e:
         return {"error": str(e)}
@@ -132,76 +127,33 @@ def expand_radius(current_radius_km: float, reason: str = "") -> dict:
     }
 
 
-# -- Tool 5: Grid search ------------------------------------------------------
+# -- Tool 5: KMeans optimal point finder --------------------------------------
 
-def grid_search(
-    center_lat: float,
-    center_lon: float,
-    radius_km: float = 5.0,
-    grid_size: int = 3,
-    store_type: str = "grocery",
-    store_size_sqft: int = 45000,
-    brand_weight: int = 75,
-    top_n: int = 5,
-    min_acres: float = 0.5,
+def find_optimal_points(
+    lat: float,
+    lon: float,
+    radius_km: float = 10.0,
+    n_points: int = 5,
 ) -> dict:
     """
-    Drop a grid_size x grid_size grid of search points around the center.
-    Run fetch + score at each point. Merge and deduplicate by parcel_id.
-    Returns top N unique parcels across the entire grid.
-    grid_size=3 -> 9 points ~1km apart
+    Fetch tract demographics once at center point.
+    Score every tract: weighted sum of population, income, low_poverty, households.
+    Run KMeans weighted by density score to find n_points optimal search locations.
+    Returns points — no parcel scoring yet.
     """
     from backend.pipeline.fetch_all import run_all
+    from backend.agents.K_means import find_gmm_points
 
-    spacing_lat = 0.009   # ~1km
-    spacing_lon = 0.013   # ~1km at Minneapolis latitude
+    print(f"  [kmeans] fetching demographics ({lat}, {lon}) radius={radius_km}km")
+    data   = run_all(lat=lat, lon=lon, radius_km=radius_km)
+    tracts = data.get("demographics", {}).get("tracts", [])
+    _fetched_data["initial"] = data
 
-    offset = (grid_size - 1) / 2
-    points = []
-    for i in range(grid_size):
-        for j in range(grid_size):
-            lat = center_lat + (i - offset) * spacing_lat
-            lon = center_lon + (j - offset) * spacing_lon
-            points.append((round(lat, 6), round(lon, 6)))
-
-    print(f"  [grid] {len(points)} points, radius={radius_km}km each")
-
-    all_parcels = {}
-    points_searched = 0
-
-    for lat, lon in points:
-        try:
-            print(f"  [grid] ({lat}, {lon})...")
-            data = run_all(lat=lat, lon=lon, radius_km=radius_km)
-            _fetched_data["latest"] = data
-
-            result = score_parcels(
-                data, store_type, store_size_sqft, brand_weight,
-                top_n=top_n * 3,
-                min_acres=min_acres,
-            )
-
-            for p in result.get("top_parcels", []):
-                pid = p.get("parcel_id") or p.get("address")
-                if pid not in all_parcels:
-                    all_parcels[pid] = p
-                else:
-                    if (p.get("huff_capture_prob") or 0) > (all_parcels[pid].get("huff_capture_prob") or 0):
-                        all_parcels[pid] = p
-
-            points_searched += 1
-
-        except Exception as e:
-            print(f"  [grid] ({lat}, {lon}) failed: {e}")
-            continue
-
-    merged = sorted(all_parcels.values(), key=lambda x: x.get("huff_capture_prob", 0), reverse=True)
-    for i, p in enumerate(merged):
-        p["rank"] = i + 1
+    print(f"  [kmeans] scoring {len(tracts)} tracts with 6 factors, fitting KMeans n={n_points}")
+    points = find_gmm_points(data, n_points)
 
     return {
-        "grid_size"      : grid_size,
-        "points_searched": points_searched,
-        "unique_parcels" : len(merged),
-        "top_parcels"    : merged[:top_n],
+        "tracts_used"  : len(tracts),
+        "n_points"     : len(points),
+        "search_points": points,
     }
