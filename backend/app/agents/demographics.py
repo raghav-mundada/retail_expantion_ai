@@ -1,6 +1,9 @@
 """
 Demographics Agent
 Wraps census_service with an agent interface that yields trace events.
+
+Uses TIGERweb to resolve census tracts by exact radius (main branch approach),
+then pulls ACS 2023 5-Year estimates for those specific tracts.
 Note: Python async generators cannot use 'return value' — results are embedded in done event data.
 """
 import asyncio
@@ -11,12 +14,13 @@ from app.models.schemas import DemographicsProfile
 async def run_demographics_agent(lat: float, lng: float, radius_miles: float = 10.0):  # noqa: E501
     """
     Async generator that yields trace events and ultimately yields DemographicsProfile.
+    Uses Census TIGERweb to find exact tracts within radius (generalized for any US city).
     """
-    yield {"agent": "demographics", "status": "running", "message": "Connecting to U.S. Census ACS API..."}
+    yield {"agent": "demographics", "status": "running", "message": "Connecting to U.S. Census ACS 2023 API..."}
     await asyncio.sleep(0.3)
 
     yield {"agent": "demographics", "status": "running",
-           "message": f"Fetching tract-level ACS 5-Year data for Maricopa County, AZ (state:04 county:013)"}
+           "message": f"Resolving census tracts within {radius_miles:.0f}-mile radius via TIGERweb spatial query..."}
     await asyncio.sleep(0.5)
 
     try:

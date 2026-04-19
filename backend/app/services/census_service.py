@@ -1,22 +1,29 @@
 """
 Census ACS API Service — generalized for any US location.
 
-Uses the Census Geocoder API (free, no key) to resolve lat/lng → state + county FIPS,
-then fetches ACS 5-Year estimates for that county.
+Uses the Census Bureau TIGERweb API to find all census tracts within a given
+radius, then pulls ACS 5-Year estimates (2023) for those exact tracts.
 
-Works anywhere in the US. Falls back to synthetic location-specific demographics
-if the Census API is unavailable.
+This replaces the county-level heuristic approach with the same high-accuracy
+method used in backend/ingestion/demographics/fetch_acs_demographics.py
+(main branch).
+
+Falls back to synthetic location-specific demographics if the Census API
+is unavailable.
 """
 import json
 import math
 import hashlib
+import logging
 import requests
 from typing import Optional, Tuple
 from app.models.schemas import DemographicsProfile
 from app.core.config import get_settings
 from app.services.supabase_service import cache_get, cache_set
 
-# ACS 5-Year variable codes
+log = logging.getLogger(__name__)
+
+# ── ACS 2023 variables ────────────────────────────────────────────────────────
 ACS_VARS = {
     "B01003_001E": "population",
     "B19013_001E": "median_income",
@@ -27,222 +34,142 @@ ACS_VARS = {
     "B15003_022E": "bachelors_degree",
     "B15003_001E": "edu_universe",
     "B25010_001E": "avg_household_size",
+    # Extras for richer output (matches ingestion pipeline)
+    "B25003_001E": "tenure_total",
+    "B25003_003E": "renter_occupied",
+    "B17001_001E": "poverty_universe",
+    "B17001_002E": "poverty_count",
 }
 
-ACS_BASE_URL = "https://api.census.gov/data/2022/acs/acs5"
-GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+ACS_BASE_URL = "https://api.census.gov/data/2023/acs/acs5"        # ← 2023 data
+TIGERWEB_URL = (
+    "https://tigerweb.geo.census.gov/arcgis/rest/services"
+    "/TIGERweb/Tracts_Blocks/MapServer/0/query"
+)
+CENSUS_NULL = -666666666
 
 
-# ── FIPS Resolution ─────────────────────────────────────────────────────────
+# ── Spatial helpers ───────────────────────────────────────────────────────────
 
-def _geocoder_cache_key(lat: float, lng: float) -> str:
-    return f"fips:{lat:.3f},{lng:.3f}"
-
-
-def resolve_fips(lat: float, lng: float) -> Tuple[str, str, str]:
-    """
-    Resolve (lat, lng) → (state_fips, county_fips, county_name) using the
-    Census Bureau Geocoder API (100% free, no key required).
-
-    Results are cached in Supabase `cache` table forever (FIPS boundaries don't change).
-    Falls back to nearest hardcoded county if geocoder is unavailable.
-    """
-    cache_key = _geocoder_cache_key(lat, lng)
-    cached = cache_get(cache_key)
-    if cached:
-        return cached["state_fips"], cached["county_fips"], cached["county_name"]
-
-    try:
-        resp = requests.get(
-            GEOCODER_URL,
-            params={
-                "x": lng, "y": lat,
-                "benchmark": "Public_AR_Current",
-                "vintage": "Current_Current",
-                "layers": "Counties",
-                "format": "json",
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        counties = data.get("result", {}).get("geographies", {}).get("Counties", [])
-        if counties:
-            c = counties[0]
-            result = {
-                "state_fips":  c.get("STATE", ""),
-                "county_fips": c.get("COUNTY", ""),
-                "county_name": c.get("NAME", "Unknown County"),
-            }
-            cache_set(cache_key, result)
-            return result["state_fips"], result["county_fips"], result["county_name"]
-    except Exception as e:
-        print(f"[CensusService] Geocoder failed for ({lat:.3f},{lng:.3f}): {e}")
-
-    return _nearest_fallback_county(lat, lng)
-
-
-def _nearest_fallback_county(lat: float, lng: float) -> Tuple[str, str, str]:
-    """
-    Hardcoded fallback: ~80 major US counties covering most population centers.
-    Used only when Census Geocoder is unreachable.
-    """
-    KNOWN_COUNTIES = [
-        # (lat_center, lng_center, state_fips, county_fips, name)
-        # Arizona
-        (33.45, -112.07, "04", "013", "Maricopa County, AZ"),
-        (32.22, -110.97, "04", "019", "Pima County, AZ"),
-        # California
-        (34.05, -118.24, "06", "037", "Los Angeles County, CA"),
-        (37.77, -122.42, "06", "075", "San Francisco County, CA"),
-        (32.72, -117.16, "06", "073", "San Diego County, CA"),
-        (37.34, -121.89, "06", "085", "Santa Clara County, CA"),
-        (33.75, -117.87, "06", "059", "Orange County, CA"),
-        (38.58, -121.49, "06", "067", "Sacramento County, CA"),
-        # Texas
-        (29.76, -95.37, "48", "201", "Harris County, TX"),
-        (30.27, -97.74, "48", "453", "Travis County, TX"),
-        (32.78, -96.80, "48", "113", "Dallas County, TX"),
-        (29.42, -98.49, "48", "029", "Bexar County, TX"),
-        (32.74, -97.10, "48", "439", "Tarrant County, TX"),
-        (31.55, -97.15, "48", "309", "McLennan County, TX"),
-        # Florida
-        (25.77, -80.19, "12", "086", "Miami-Dade County, FL"),
-        (28.54, -81.38, "12", "095", "Orange County, FL"),
-        (27.77, -82.64, "12", "057", "Hillsborough County, FL"),
-        (26.12, -80.14, "12", "011", "Broward County, FL"),
-        (30.33, -81.66, "12", "031", "Duval County, FL"),
-        # New York
-        (40.71, -74.01, "36", "061", "New York County, NY"),
-        (40.65, -73.95, "36", "047", "Kings County, NY"),
-        (40.73, -73.79, "36", "081", "Queens County, NY"),
-        (43.05, -76.15, "36", "067", "Onondaga County, NY"),
-        (42.89, -78.86, "36", "029", "Erie County, NY"),
-        # Illinois
-        (41.88, -87.63, "17", "031", "Cook County, IL"),
-        (40.12, -88.25, "17", "019", "Champaign County, IL"),
-        # Pennsylvania
-        (39.95, -75.17, "42", "101", "Philadelphia County, PA"),
-        (40.44, -79.99, "42", "003", "Allegheny County, PA"),
-        # Ohio
-        (39.96, -82.99, "39", "049", "Franklin County, OH"),
-        (41.50, -81.69, "39", "035", "Cuyahoga County, OH"),
-        (39.10, -84.51, "39", "061", "Hamilton County, OH"),
-        # Michigan
-        (42.33, -83.05, "26", "163", "Wayne County, MI"),
-        (42.73, -84.56, "26", "065", "Ingham County, MI"),
-        (43.02, -85.67, "26", "081", "Kent County, MI"),
-        # Georgia
-        (33.75, -84.39, "13", "121", "Fulton County, GA"),
-        (33.45, -84.15, "13", "063", "Clayton County, GA"),
-        # North Carolina
-        (35.23, -80.84, "37", "119", "Mecklenburg County, NC"),
-        (35.99, -78.90, "37", "063", "Durham County, NC"),
-        (35.78, -78.64, "37", "183", "Wake County, NC"),
-        # Washington
-        (47.61, -122.33, "53", "033", "King County, WA"),
-        (47.66, -117.43, "53", "063", "Spokane County, WA"),
-        # Colorado
-        (39.74, -104.98, "08", "031", "Denver County, CO"),
-        (38.84, -104.82, "08", "041", "El Paso County, CO"),
-        (40.01, -105.27, "08", "013", "Boulder County, CO"),
-        # Minnesota
-        (44.98, -93.27, "27", "053", "Hennepin County, MN"),
-        (44.95, -93.09, "27", "123", "Ramsey County, MN"),
-        (44.74, -93.22, "27", "037", "Dakota County, MN"),
-        (45.00, -93.42, "27", "163", "Anoka County, MN"),
-        (44.87, -93.59, "27", "139", "Scott County, MN"),
-        (45.59, -94.20, "27", "145", "Stearns County, MN"),
-        (46.87, -96.78, "27", "017", "Clay County, MN"),
-        (44.02, -92.47, "27", "109", "Olmsted County, MN"),
-        # Wisconsin
-        (43.04, -87.91, "55", "079", "Milwaukee County, WI"),
-        (43.07, -89.40, "55", "025", "Dane County, WI"),
-        # Iowa
-        (41.66, -91.53, "19", "103", "Johnson County, IA"),
-        (41.59, -93.62, "19", "153", "Polk County, IA"),
-        # Missouri
-        (38.63, -90.20, "29", "510", "St. Louis City, MO"),
-        (39.10, -94.58, "29", "095", "Jackson County, MO"),
-        # Tennessee
-        (36.17, -86.78, "47", "037", "Davidson County, TN"),
-        (35.15, -90.05, "47", "157", "Shelby County, TN"),
-        # Virginia
-        (37.54, -77.43, "51", "760", "Richmond City, VA"),
-        (38.90, -77.01, "51", "013", "Arlington County, VA"),
-        # Maryland
-        (39.29, -76.61, "24", "510", "Baltimore City, MD"),
-        (38.99, -76.94, "24", "033", "Prince George's County, MD"),
-        # Nevada
-        (36.17, -115.14, "32", "003", "Clark County, NV"),
-        (39.53, -119.81, "32", "031", "Washoe County, NV"),
-        # Oregon
-        (45.52, -122.68, "41", "051", "Multnomah County, OR"),
-        (44.05, -123.09, "41", "039", "Lane County, OR"),
-        # Indiana
-        (39.77, -86.16, "18", "097", "Marion County, IN"),
-        (41.08, -85.14, "18", "003", "Allen County, IN"),
-        # Massachusetts
-        (42.36, -71.06, "25", "025", "Suffolk County, MA"),
-        (42.34, -71.57, "25", "017", "Middlesex County, MA"),
-        # New Jersey
-        (40.73, -74.17, "34", "013", "Essex County, NJ"),
-        (40.22, -74.77, "34", "021", "Mercer County, NJ"),
-        # Utah
-        (40.76, -111.89, "49", "035", "Salt Lake County, UT"),
-        (40.23, -111.66, "49", "049", "Utah County, UT"),
-        # Kansas
-        (37.69, -97.34, "20", "173", "Sedgwick County, KS"),
-        (39.11, -94.63, "20", "091", "Johnson County, KS"),
-        # Nebraska
-        (41.26, -96.01, "31", "055", "Douglas County, NE"),
-        # Oklahoma
-        (35.47, -97.52, "40", "109", "Oklahoma County, OK"),
-        (36.15, -95.99, "40", "143", "Tulsa County, OK"),
-        # Arkansas
-        (34.75, -92.29, "05", "119", "Pulaski County, AR"),
-        # Louisiana
-        (29.95, -90.07, "22", "071", "Orleans Parish, LA"),
-        (30.44, -91.19, "22", "033", "East Baton Rouge Parish, LA"),
-        # Alabama
-        (33.52, -86.80, "01", "073", "Jefferson County, AL"),
-        # South Carolina
-        (34.00, -81.03, "45", "079", "Richland County, SC"),
-        (32.78, -79.93, "45", "019", "Charleston County, SC"),
-    ]
-
-    best = min(KNOWN_COUNTIES, key=lambda c: _haversine_miles(lat, lng, c[0], c[1]))
-    return best[2], best[3], best[4]
-
-
-# ── Census Data ──────────────────────────────────────────────────────────────
-
-def _county_cache_key(state_fips: str, county_fips: str) -> str:
-    return f"acs:{state_fips}:{county_fips}"
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1))
+         * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
 
 
 def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    R = 3958.8
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return _haversine_km(lat1, lng1, lat2, lng2) * 0.621371
 
 
-def fetch_tract_demographics(state_fips: str, county_fips: str, api_key: str = "") -> list[dict]:
-    """Fetch all census tracts for a county (cached in Supabase)."""
-    cache_key = _county_cache_key(state_fips, county_fips)
+def _bounding_box(lat: float, lon: float, radius_km: float) -> dict:
+    """Rectangular bounding box that fully contains the circle."""
+    lat_delta = radius_km / 111.0
+    lon_delta = radius_km / (111.0 * math.cos(math.radians(lat)))
+    return {
+        "min_lat": lat - lat_delta,
+        "max_lat": lat + lat_delta,
+        "min_lon": lon - lon_delta,
+        "max_lon": lon + lon_delta,
+    }
+
+
+# ── Step 1: Find tracts within radius via TIGERweb ───────────────────────────
+
+def get_tracts_in_radius(lat: float, lon: float, radius_km: float):
+    """
+    Query TIGERweb for every census tract whose centroid falls within
+    radius_km kilometres of (lat, lon).
+
+    Returns list of dicts with: geoid, state, county, tract,
+    centroid_lat, centroid_lon, dist_km
+    """
+    cache_key = f"tigerweb:{lat:.3f},{lon:.3f},{radius_km}"
     cached = cache_get(cache_key)
     if cached:
-        print(f"[CensusService] Cache hit: {len(cached)} tracts for {state_fips}/{county_fips}")
+        log.info(f"[CensusService] TIGERweb cache hit: {len(cached)} tracts")
         return cached
 
-    variables = ",".join(ACS_VARS.keys())
+    bb = _bounding_box(lat, lon, radius_km)
+
     params = {
-        "get": f"NAME,{variables}",
+        "where"          : "1=1",
+        "geometry"       : f"{bb['min_lon']},{bb['min_lat']},{bb['max_lon']},{bb['max_lat']}",
+        "geometryType"   : "esriGeometryEnvelope",
+        "spatialRel"     : "esriSpatialRelIntersects",
+        "outFields"      : "STATE,COUNTY,TRACT,CENTLAT,CENTLON,GEOID",
+        "returnGeometry" : "false",
+        "f"              : "json",
+        "resultRecordCount": 1000,
+    }
+
+    try:
+        resp = requests.get(TIGERWEB_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        features = resp.json().get("features", [])
+        log.info(f"[CensusService] TIGERweb returned {len(features)} tracts in bounding box")
+    except Exception as e:
+        log.error(f"[CensusService] TIGERweb failed: {e}")
+        return []
+
+    tracts = []
+    for feat in features:
+        attrs = feat.get("attributes", {})
+        clat = attrs.get("CENTLAT")
+        clon = attrs.get("CENTLON")
+        if clat is None or clon is None:
+            continue
+        try:
+            clat, clon = float(clat), float(clon)
+        except (ValueError, TypeError):
+            continue
+
+        dist_km = _haversine_km(lat, lon, clat, clon)
+        if dist_km > radius_km:
+            continue
+
+        tracts.append({
+            "geoid"       : attrs.get("GEOID", ""),
+            "state"       : str(attrs.get("STATE", "")).zfill(2),
+            "county"      : str(attrs.get("COUNTY", "")).zfill(3),
+            "tract"       : str(attrs.get("TRACT", "")).zfill(6),
+            "centroid_lat": round(clat, 6),
+            "centroid_lon": round(clon, 6),
+            "dist_km"     : round(dist_km, 3),
+        })
+
+    tracts.sort(key=lambda t: t["dist_km"])
+    log.info(f"[CensusService] {len(tracts)} tracts within {radius_km} km of ({lat:.3f},{lon:.3f})")
+
+    if tracts:
+        cache_set(cache_key, tracts)
+
+    return tracts
+
+
+# ── Step 2: Fetch ACS data for those specific tracts ─────────────────────────
+
+def _acs_county_cache_key(state: str, county: str) -> str:
+    return f"acs2023:{state}:{county}"
+
+
+def _fetch_acs_county(state: str, county: str, api_key: str = "") -> list[dict]:
+    """Pull all ACS tracts for a state+county combo (cached)."""
+    cache_key = _acs_county_cache_key(state, county)
+    cached = cache_get(cache_key)
+    if cached:
+        log.info(f"[CensusService] ACS cache hit: {len(cached)} tracts for {state}/{county}")
+        return cached
+
+    variables_str = "NAME," + ",".join(ACS_VARS.keys())
+    params = {
+        "get": variables_str,
         "for": "tract:*",
-        "in": f"state:{state_fips} county:{county_fips}",
+        "in" : f"state:{state} county:{county}",
     }
     if api_key:
         params["key"] = api_key
@@ -250,100 +177,89 @@ def fetch_tract_demographics(state_fips: str, county_fips: str, api_key: str = "
     try:
         resp = requests.get(ACS_BASE_URL, params=params, timeout=30)
         resp.raise_for_status()
-        data = resp.json()
-        headers = data[0]
-        rows = [dict(zip(headers, row)) for row in data[1:]]
+        raw = resp.json()
+        headers = raw[0]
+        rows = [dict(zip(headers, row)) for row in raw[1:]]
+        log.info(f"[CensusService] ACS 2023: fetched {len(rows)} tracts for state={state} county={county}")
         cache_set(cache_key, rows)
-        print(f"[CensusService] Fetched + cached {len(rows)} tracts for {state_fips}/{county_fips}")
         return rows
     except Exception as e:
-        print(f"[CensusService] ACS fetch failed for {state_fips}/{county_fips}: {e}")
+        log.error(f"[CensusService] ACS fetch failed for {state}/{county}: {e}")
         return []
 
 
-def get_demographics_for_location(lat: float, lng: float, radius_miles: float = 10.0) -> DemographicsProfile:
-    """
-    Aggregate demographics for any US location.
-    Step 1: Census Geocoder resolves (lat, lng) → state + county FIPS.
-    Step 2: ACS 5-Year data fetched for that county.
-    Step 3: Tracts within radius aggregated.
-    Step 4: Synthetic fallback if API unavailable.
-    """
-    settings = get_settings()
-
-    # Step 1: resolve FIPS
-    state_fips, county_fips, county_name = resolve_fips(lat, lng)
-    print(f"[CensusService] Resolved ({lat:.3f},{lng:.3f}) → {county_name} ({state_fips}/{county_fips})")
-
-    if not state_fips or not county_fips:
-        return _synthetic_demographics(lat, lng, radius_miles)
-
-    # Step 2: fetch tracts
-    tracts = fetch_tract_demographics(state_fips, county_fips, settings.census_api_key)
-
-    if not tracts:
-        return _synthetic_demographics(lat, lng, radius_miles)
-
-    # Step 3: filter to radius
-    nearby = _filter_nearby_tracts(tracts, lat, lng, radius_miles, state_fips, county_fips)
-    if not nearby:
-        nearby = tracts[:20]  # use any 20 tracts if radius finds nothing
-
-    return _aggregate_demographics(nearby)
-
-
-def _filter_nearby_tracts(
-    tracts: list[dict], lat: float, lng: float, radius_miles: float,
-    state_fips: str = "04", county_fips: str = "013",
-) -> list[dict]:
-    """
-    Filter tracts by approximate centroid distance.
-    Derives centroid from tract FIPS number mapped linearly onto the county bounding box.
-    """
-    # Rough county bounding box from known US county centers + ±0.7° span
-    county_centers = {
-        ("04", "013"): (33.45, -112.07),  # Maricopa
-        ("27", "053"): (44.98, -93.27),   # Hennepin
-        ("27", "123"): (44.95, -93.09),   # Ramsey
-        ("27", "037"): (44.74, -93.22),   # Dakota
-        ("06", "037"): (34.05, -118.24),  # LA
-        ("48", "201"): (29.76, -95.37),   # Harris
-        ("36", "061"): (40.71, -74.01),   # Manhattan
-    }
-    center_lat, center_lng = county_centers.get((state_fips, county_fips), (lat, lng))
-    lat_span = 0.80   # ~55 miles N-S
-    lng_span = 1.00   # ~55 miles E-W
-
-    nearby = []
-    for t in tracts:
-        tract_code = t.get("tract", "")
-        pop = _safe_float(t.get("B01003_001E"))
-        if pop <= 0:
-            continue
-        # Estimate centroid from tract number
-        try:
-            num = float(tract_code.lstrip("0") or "0") / 100.0
-            norm = min(num / 9900.0, 1.0)
-            clat = center_lat - lat_span / 2 + norm * lat_span
-            clng = center_lng - lng_span / 2 + (norm * 7 % 1.0) * lng_span
-        except Exception:
-            clat, clng = center_lat, center_lng
-
-        if _haversine_miles(lat, lng, clat, clng) <= radius_miles:
-            nearby.append(t)
-
-    return nearby[:40]
-
+# ── Step 3: Aggregate demographics ───────────────────────────────────────────
 
 def _safe_float(val, default=0.0) -> float:
     try:
         v = float(val)
-        return v if v > 0 else default
+        return v if v > 0 and v != CENSUS_NULL else default
     except (TypeError, ValueError):
         return default
 
 
-def _aggregate_demographics(tracts: list[dict]) -> DemographicsProfile:
+def get_demographics_for_location(
+    lat: float, lng: float, radius_miles: float = 10.0
+) -> DemographicsProfile:
+    """
+    Aggregate demographics for any US location using TIGERweb tract resolution.
+
+    Step 1: TIGERweb finds all tracts whose centroid is within radius.
+    Step 2: ACS 2023 5-Year fetched per state+county group.
+    Step 3: Only tracts from step 1 are used.
+    Step 4: Synthetic fallback if APIs unavailable.
+    """
+    settings = get_settings()
+    radius_km = radius_miles * 1.60934
+
+    # Step 1: find tracts
+    tract_meta = get_tracts_in_radius(lat, lng, radius_km)
+    if not tract_meta:
+        log.warning("[CensusService] No tracts found via TIGERweb — using synthetic fallback")
+        return _synthetic_demographics(lat, lng, radius_miles)
+
+    # Build lookup: geoid → metadata
+    tract_lookup = {t["geoid"]: t for t in tract_meta}
+
+    # Step 2: fetch by county group
+    from itertools import groupby
+    keyfn = lambda t: (t["state"], t["county"])
+    tract_meta_sorted = sorted(tract_meta, key=keyfn)
+
+    county_name = "Unknown"
+    acs_rows = []
+    for (state, county), group in groupby(tract_meta_sorted, key=keyfn):
+        wanted_geoids = {t["geoid"] for t in group}
+        county_rows = _fetch_acs_county(state, county, settings.census_api_key)
+        # Filter to only the tracts within radius
+        for row in county_rows:
+            geoid = row.get("state", "") + row.get("county", "") + row.get("tract", "")
+            if geoid in wanted_geoids:
+                # Inject centroid metadata
+                row["_centroid_lat"] = tract_lookup.get(geoid, {}).get("centroid_lat")
+                row["_centroid_lon"] = tract_lookup.get(geoid, {}).get("centroid_lon")
+                row["_dist_km"]      = tract_lookup.get(geoid, {}).get("dist_km")
+                acs_rows.append(row)
+        if county_rows:
+            # Grab county name from first valid NAME field
+            names = [r.get("NAME", "") for r in county_rows if r.get("NAME")]
+            if names:
+                # NAME = "Census Tract XXXX; County; State" — extract county
+                parts = names[0].split(";")
+                if len(parts) >= 2:
+                    county_name = parts[1].strip()
+
+    if not acs_rows:
+        log.warning("[CensusService] No ACS rows matched TIGERweb tracts — using synthetic fallback")
+        return _synthetic_demographics(lat, lng, radius_miles)
+
+    tracts_used = len(acs_rows)
+    log.info(f"[CensusService] Aggregating {tracts_used} tracts in {county_name}")
+
+    return _aggregate_demographics(acs_rows, county_name)
+
+
+def _aggregate_demographics(tracts: list[dict], county_name: str = "Unknown") -> DemographicsProfile:
     total_pop     = sum(_safe_float(t.get("B01003_001E")) for t in tracts)
     total_hh      = sum(_safe_float(t.get("B11001_001E")) for t in tracts)
     total_owner   = sum(_safe_float(t.get("B25003_002E")) for t in tracts)
@@ -351,13 +267,13 @@ def _aggregate_demographics(tracts: list[dict]) -> DemographicsProfile:
     total_bach    = sum(_safe_float(t.get("B15003_022E")) for t in tracts)
     edu_universe  = sum(_safe_float(t.get("B15003_001E")) for t in tracts)
 
-    valid_incomes = [_safe_float(t.get("B19013_001E")) for t in tracts if _safe_float(t.get("B19013_001E")) > 0]
+    valid_incomes = [_safe_float(t.get("B19013_001E")) for t in tracts if _safe_float(t.get("B19013_001E")) > 1000]
     med_income = sum(valid_incomes) / len(valid_incomes) if valid_incomes else 55000.0
 
-    valid_ages = [_safe_float(t.get("B01002_001E")) for t in tracts if _safe_float(t.get("B01002_001E")) > 0]
+    valid_ages = [_safe_float(t.get("B01002_001E")) for t in tracts if _safe_float(t.get("B01002_001E")) > 1]
     med_age = sum(valid_ages) / len(valid_ages) if valid_ages else 36.0
 
-    valid_hh_size = [_safe_float(t.get("B25010_001E")) for t in tracts if _safe_float(t.get("B25010_001E")) > 0]
+    valid_hh_size = [_safe_float(t.get("B25010_001E")) for t in tracts if _safe_float(t.get("B25010_001E")) > 0.5]
     avg_hh_size = sum(valid_hh_size) / len(valid_hh_size) if valid_hh_size else 2.7
 
     owner_pct   = (total_owner / total_hh * 100) if total_hh > 0 else 60.0

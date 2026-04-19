@@ -10,6 +10,7 @@ Assesses the physical + infrastructure suitability of a candidate site:
   - Active construction / development activity (OSM)
 
 All OSM queries are free and require no API key.
+Uses the robust multi-mirror overpass_client (3 endpoints, exponential backoff).
 FCC Broadband API is free and public.
 TinyFish calls (Loopnet) are optional — gracefully fallback if unavailable.
 """
@@ -18,32 +19,13 @@ import math
 from typing import AsyncGenerator
 
 import requests
-
 from app.models.schemas import AmenityProfile, StoreSizeEnum
 from app.services.tinyfish_service import scrape_loopnet_listings, _has_tinyfish_key
+from app.services import overpass_client
 
-# Overpass API endpoint
-_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-
-# Bounding box from center lat/lng + radius in degrees (approx 2 miles = 0.029 deg)
+# Bounding box from center lat/lng + radius in degrees
 def _bbox(lat: float, lng: float, radius_deg: float = 0.06) -> str:
     return f"{lat - radius_deg},{lng - radius_deg},{lat + radius_deg},{lng + radius_deg}"
-
-
-def _overpass_query(query: str) -> list[dict]:
-    """Run a synchronous Overpass query and return elements list."""
-    try:
-        resp = requests.post(
-            _OVERPASS_URL,
-            data={"data": query},
-            timeout=15,
-            headers={"User-Agent": "RetailIQ/1.0 (hackathon project)"},
-        )
-        if resp.status_code == 200:
-            return resp.json().get("elements", [])
-    except Exception as e:
-        print(f"[Overpass] Error: {e}")
-    return []
 
 
 def _count_power_nodes(lat: float, lng: float) -> int:
@@ -56,7 +38,7 @@ def _count_power_nodes(lat: float, lng: float) -> int:
   way["power"="line"]({bbox});
 );
 out count;"""
-    elements = _overpass_query(q)
+    elements = overpass_client.query(q, timeout_s=15)
     return len(elements)
 
 
@@ -70,7 +52,7 @@ def _count_water_nodes(lat: float, lng: float) -> int:
   way["waterway"~"canal|drain|ditch"]({bbox});
 );
 out count;"""
-    elements = _overpass_query(q)
+    elements = overpass_client.query(q, timeout_s=15)
     return len(elements)
 
 
@@ -84,7 +66,7 @@ def _check_zoning(lat: float, lng: float) -> float:
   way["amenity"~"marketplace|parking"]({bbox});
 );
 out count;"""
-    elements = _overpass_query(q)
+    elements = overpass_client.query(q, timeout_s=15)
     count = len(elements)
     # 0 = residential only (~40), 5+ = clearly commercial area (~90)
     return min(40 + count * 10, 95)
@@ -99,7 +81,7 @@ def _check_construction(lat: float, lng: float) -> float:
   way["building"="construction"]({bbox});
 );
 out count;"""
-    elements = _overpass_query(q)
+    elements = overpass_client.query(q, timeout_s=15)
     count = len(elements)
     # More construction = more development activity = higher score
     return min(45 + count * 12, 95)
