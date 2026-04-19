@@ -82,6 +82,8 @@ def persist_run(data: dict[str, Any]) -> str:
                 "tract_geoid"     : t.get("tract_geoid"),
                 "name"            : t.get("NAME"),
                 "dist_km"         : _safe_float(t.get("dist_km")),
+                "centroid_lat"    : _safe_float(t.get("centroid_lat")),
+                "centroid_lon"    : _safe_float(t.get("centroid_lon")),
                 "total_population": _safe_int(t.get("total_population")),
                 "total_households": _safe_int(t.get("total_households")),
                 "median_hh_income": _safe_float(t.get("median_hh_income")),
