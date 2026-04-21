@@ -1,0 +1,10 @@
+{
+  "name": "retail_expantion_ai",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "api": "cd backend && PYTHONPATH=. python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003",
+    "build": "npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend"
+  }
+}
